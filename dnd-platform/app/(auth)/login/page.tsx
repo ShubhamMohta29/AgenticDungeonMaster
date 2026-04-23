@@ -1,30 +1,74 @@
 'use client'
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
+  const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError]       = useState('')
+  const [loading, setLoading]   = useState(false)
   const router = useRouter()
 
   async function handleLogin() {
+    setLoading(true)
+    setError('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) return setError(error.message)
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
     router.push('/dashboard')
   }
 
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') handleLogin()
+  }
+
   return (
-    <div style={{ maxWidth: 400, margin: '100px auto', padding: 24 }}>
-      <h1>Sign in</h1>
-      <input placeholder="Email" value={email}
-        onChange={e => setEmail(e.target.value)} style={{ display: 'block', width: '100%', marginBottom: 12 }} />
-      <input placeholder="Password" type="password" value={password}
-        onChange={e => setPassword(e.target.value)} style={{ display: 'block', width: '100%', marginBottom: 12 }} />
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <button onClick={handleLogin}>Sign in</button>
-      <p><a href="/register">Create account</a></p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-8">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 w-full max-w-sm">
+        <div className="text-center mb-8">
+          <p className="text-4xl mb-2">⚔️</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Welcome back</h1>
+          <p className="text-sm text-gray-400 mt-1">Sign in to continue your adventure</p>
+        </div>
+
+        <div className="space-y-3 mb-4">
+          <input
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Email"
+            type="email"
+            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-purple-400"
+          />
+          <input
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Password"
+            type="password"
+            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-purple-400"
+          />
+        </div>
+
+        {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
+
+        <button
+          onClick={handleLogin}
+          disabled={loading || !email || !password}
+          className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-medium rounded-xl py-3 transition-colors mb-3"
+        >
+          {loading ? 'Signing in...' : 'Sign in'}
+        </button>
+
+        <p className="text-sm text-center text-gray-400">
+          No account?{' '}
+          <a href="/register" className="text-purple-600 hover:underline">Create one</a>
+        </p>
+      </div>
     </div>
   )
 }
