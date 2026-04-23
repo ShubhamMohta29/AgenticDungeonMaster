@@ -5,11 +5,17 @@ import type { Message } from '@/types/message'
 
 function MessageBubble({ message }: { message: Message }) {
   if (message.type === 'narration') {
+    const cleanContent = message.content
+      .replace(/<[^>]+\/>/g, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+
     return (
       <div className="mb-4 animate-fadeIn">
         <p className="text-gray-900 dark:text-gray-100 leading-relaxed text-base"
            style={{ fontFamily: 'var(--font-serif, Georgia, serif)' }}>
-          {message.content}
+          {cleanContent}
         </p>
       </div>
     )

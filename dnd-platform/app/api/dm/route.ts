@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { supabaseAdmin } from '@/lib/supabaseServer'
-import { callClaude } from '@/lib/claude'
+import { callClaude } from '@/lib/groq'
 import { parseGameEvents } from '@/lib/gameEvents'
 import { buildDMSystemPrompt } from '@/lib/systemPrompt'
 import { getContextForDM, shouldSummarize, summarizeSession } from '@/lib/worldMemory'

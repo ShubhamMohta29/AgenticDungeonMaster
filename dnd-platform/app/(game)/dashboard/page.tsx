@@ -110,32 +110,49 @@ export default function DashboardPage() {
         ) : (
           <div className="grid gap-4 mb-6">
             {campaigns.map(campaign => (
-              <div
-                key={campaign.id}
-                className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between hover:border-purple-300 dark:hover:border-purple-700 transition-colors cursor-pointer"
-                onClick={() => router.push(`/campaign/${campaign.id}/play`)}
-              >
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <h2 className="font-semibold text-gray-900 dark:text-gray-100">
-                      {campaign.name}
-                    </h2>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      campaign.dm_mode === 'ai'
-                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
-                        : 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300'
-                    }`}>
-                      {campaign.dm_mode === 'ai' ? 'AI DM' : 'Human DM'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{campaign.setting}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {campaign.session_count} sessions · Invite: {campaign.invite_code}
-                  </p>
-                </div>
-                <span className="text-gray-400 text-xl">→</span>
-              </div>
-            ))}
+  <div
+    key={campaign.id}
+    className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between hover:border-purple-300 dark:hover:border-purple-700 transition-colors"
+  >
+    <div
+      className="flex-1 cursor-pointer"
+      onClick={() => router.push(`/campaign/${campaign.id}/play`)}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <h2 className="font-semibold text-gray-900 dark:text-gray-100">
+          {campaign.name}
+        </h2>
+        <span className={`text-xs px-2 py-0.5 rounded-full ${
+          campaign.dm_mode === 'ai'
+            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+            : 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300'
+        }`}>
+          {campaign.dm_mode === 'ai' ? 'AI DM' : 'Human DM'}
+        </span>
+      </div>
+      <p className="text-sm text-gray-500 dark:text-gray-400">{campaign.setting}</p>
+      <p className="text-xs text-gray-400 mt-1">
+        {campaign.session_count} sessions · Invite: {campaign.invite_code}
+      </p>
+    </div>
+    <div className="flex flex-col gap-2 ml-4">
+      <button
+        onClick={() => router.push(`/campaign/${campaign.id}/play`)}
+        className="text-xs px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+      >
+        Play →
+      </button>
+      {campaign.dm_mode === 'human' && (
+        <button
+          onClick={() => router.push(`/campaign/${campaign.id}/dm-console`)}
+          className="text-xs px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
+          DM Console
+        </button>
+      )}
+    </div>
+  </div>
+))}
           </div>
         )}
 

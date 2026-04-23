@@ -1,5 +1,5 @@
 import { supabaseAdmin } from './supabaseServer'
-import { callClaudeHaiku } from './claude'
+import { callClaudeHaiku } from './groq'
 import type { Message } from '@/types/message'
 import type { WorldState } from '@/types/campaign'
 
