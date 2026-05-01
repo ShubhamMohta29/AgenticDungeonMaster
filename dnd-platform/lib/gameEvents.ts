@@ -11,6 +11,7 @@ export type GameEventType =
   | 'condition_add'
   | 'condition_remove'
   | 'roll_request'
+  | 'pay'
 
 export interface GameEvent {
   type: GameEventType
@@ -37,7 +38,7 @@ export function parseGameEvents(raw: string): ParsedResponse {
   const rollRequests: RollRequest[] = []
 
   // Extract all XML-style game event tags
-  const tagRegex = /<(game_event|roll_request|scene_update|new_npc|quest_update|new_quest|start_combat|loot)\s([^/]*?)\/>/g
+  const tagRegex = /<(game_event|roll_request|scene_update|new_npc|quest_update|new_quest|start_combat|loot|pay)\s([^/]*?)\/>/g
 
   let match
   while ((match = tagRegex.exec(raw)) !== null) {
@@ -91,6 +92,7 @@ export function buildEventSummary(events: GameEvent[]): string {
       case 'heal':    return `${e.data.target} heals ${e.data.amount} HP`
       case 'xp':      return `Party earns ${e.data.amount} XP`
       case 'loot':    return `Found: ${e.data.quantity}x ${e.data.item}`
+      case 'pay':     return `Paid: ${e.data.quantity}x ${e.data.item}`
       default:        return ''
     }
   }).filter(Boolean).join(', ')

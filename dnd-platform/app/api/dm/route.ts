@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { supabaseAdmin } from '@/lib/supabaseServer'
-import { callClaude } from '@/lib/groq'
+import { getAIProvider } from '@/lib/ai'
 import { parseGameEvents } from '@/lib/gameEvents'
 import { buildDMSystemPrompt } from '@/lib/systemPrompt'
 import { getContextForDM, shouldSummarize, summarizeSession } from '@/lib/worldMemory'
+import { EventHandlerFactory } from '@/lib/events/EventHandlerFactory'
 
 export async function POST(req: NextRequest) {
   try {
@@ -80,8 +81,9 @@ export async function POST(req: NextRequest) {
     // Add current player action
     messageHistory.push({ role: 'user', content: action })
 
-    // Call Claude
-    const response = await callClaude({
+    // Call AI provider (Strategy: swapping provider = changing getAIProvider() only)
+    const ai = getAIProvider()
+    const response = await ai.complete({
       system: systemPrompt,
       messages: messageHistory,
       maxTokens: 1000
@@ -111,8 +113,8 @@ export async function POST(req: NextRequest) {
       .select()
       .single()
 
-    // Apply game events
-    await applyEvents(events, campaignId, characters || [])
+    // Apply game events (Factory: each type dispatched to a focused handler)
+    await EventHandlerFactory.dispatch(events, { campaignId, characters: characters || [], db: supabaseAdmin })
 
     // Update scene if scene_update event present
     const sceneUpdate = events.find(e => e.type === 'scene_update')
@@ -141,72 +143,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-async function applyEvents(
-  events: { type: string; data: Record<string, string> }[],
-  campaignId: string,
-  characters: { id: string; name: string; hp: number; max_hp: number; xp: number }[]
-) {
-  for (const event of events) {
-    try {
-      if (event.type === 'damage') {
-        const target = characters.find(
-          c => c.name.toLowerCase() === event.data.target?.toLowerCase()
-        )
-        if (target) {
-          const newHp = Math.max(0, target.hp - parseInt(event.data.amount || '0'))
-          await supabaseAdmin
-            .from('characters')
-            .update({ hp: newHp })
-            .eq('id', target.id)
-        }
-      }
-
-      if (event.type === 'heal') {
-        const target = characters.find(
-          c => c.name.toLowerCase() === event.data.target?.toLowerCase()
-        )
-        if (target) {
-          const newHp = Math.min(target.max_hp, target.hp + parseInt(event.data.amount || '0'))
-          await supabaseAdmin
-            .from('characters')
-            .update({ hp: newHp })
-            .eq('id', target.id)
-        }
-      }
-
-      if (event.type === 'xp') {
-        const amount = parseInt(event.data.amount || '0')
-        for (const character of characters) {
-          await supabaseAdmin
-            .from('characters')
-            .update({ xp: character.xp + amount })
-            .eq('id', character.id)
-        }
-      }
-
-      if (event.type === 'new_npc') {
-        await supabaseAdmin.from('npcs').insert({
-          campaign_id: campaignId,
-          name: event.data.name,
-          description: event.data.description,
-          disposition: event.data.disposition || 'unknown'
-        })
-      }
-
-      if (event.type === 'new_quest') {
-        await supabaseAdmin.from('quests').insert({
-          campaign_id: campaignId,
-          title: event.data.title,
-          description: event.data.description,
-          xp_reward: parseInt(event.data.xp_reward || '0'),
-          status: 'active',
-          objectives: []
-        })
-      }
-
-    } catch (err) {
-      console.error(`Failed to apply event ${event.type}:`, err)
-    }
-  }
-}
+

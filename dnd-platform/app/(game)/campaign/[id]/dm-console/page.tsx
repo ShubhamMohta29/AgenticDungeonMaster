@@ -16,7 +16,7 @@ export default function DMConsolePage() {
   const router   = useRouter()
   const campaignId = params.id as string
 
-  const { setCampaign, setCharacters, setMessages, addMessage, updateCharacterHp, characters } = useGameStore()
+  const { setCampaign, setCharacters, setMessages, addMessage, updateCharacter, characters } = useGameStore()
 
   const [activePanel, setActivePanel] = useState<Panel>('party')
   const [narrationDraft, setNarrationDraft] = useState('')
@@ -67,14 +67,14 @@ export default function DMConsolePage() {
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public',
         table: 'characters', filter: `campaign_id=eq.${campaignId}`
-      }, payload => updateCharacterHp(payload.new.id, payload.new.hp))
+      }, payload => updateCharacter(payload.new.id, payload.new))
       .subscribe()
 
     return () => {
       supabase.removeChannel(messagesSub)
       supabase.removeChannel(charactersSub)
     }
-  }, [campaignId, addMessage, updateCharacterHp])
+  }, [campaignId, addMessage, updateCharacter])
 
   const panels: { id: Panel; label: string }[] = [
     { id: 'party',   label: '👥 Party' },
