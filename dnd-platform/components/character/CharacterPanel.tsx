@@ -4,6 +4,7 @@ import { useGameStore } from '@/store/gameStore'
 import { HPBar } from '@/components/ui/HPBar'
 import { Badge } from '@/components/ui/Badge'
 import { CharacterSheet } from './CharacterSheet'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 export function CharacterPanel() {
   const { myCharacter } = useGameStore()
@@ -106,13 +107,19 @@ export function CharacterPanel() {
           </div>
         )}
 
-        {/* Full sheet button */}
-        <button
-          onClick={() => setShowSheet(true)}
-          className="mt-auto pt-6 text-xs text-amber-highlight hover:text-amber-main transition-colors text-center font-medium border-t border-white/5"
-        >
-          View full character sheet →
-        </button>
+        {/* Settings & Full sheet button */}
+        <div className="mt-auto pt-6 flex flex-col gap-4 border-t border-white/5">
+          <button
+            onClick={() => setShowSheet(true)}
+            className="text-xs text-amber-highlight hover:text-amber-main transition-colors text-center font-medium"
+          >
+            View full character sheet →
+          </button>
+          
+          <div className="flex justify-center">
+            <ThemeToggle />
+          </div>
+        </div>
       </div>
 
       {showSheet && (
