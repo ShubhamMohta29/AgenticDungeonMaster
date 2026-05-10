@@ -1,5 +1,23 @@
 import { supabaseAdmin } from './supabaseServer'
 
+const XP_THRESHOLDS = [
+  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
+  85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000
+]
+
+function getLevelFromXP(xp: number): number {
+  let level = 1
+  for (let i = 1; i < XP_THRESHOLDS.length; i++) {
+    if (xp >= XP_THRESHOLDS[i]) level = i + 1
+    else break
+  }
+  return Math.min(level, 20)
+}
+
+function getProficiencyBonus(level: number): number {
+  return Math.floor((level - 1) / 4) + 2
+}
+
 export async function applyEvents(
   events: any[],
   campaignId: string,
@@ -9,9 +27,23 @@ export async function applyEvents(
   const characterMap = new Map<string, any>()
   initialCharacters.forEach(c => characterMap.set(c.id, JSON.parse(JSON.stringify(c))))
 
+  // Proactively check for level-ups on all characters in this batch
+  for (const target of characterMap.values()) {
+    const correctLevel = getLevelFromXP(target.xp || 0)
+    if (correctLevel > target.level) {
+      console.log(`Syncing level for ${target.name}: ${target.level} -> ${correctLevel}`)
+      target.level = correctLevel
+      target.proficiency_bonus = getProficiencyBonus(correctLevel)
+      await supabaseAdmin.from('characters').update({ 
+        level: target.level,
+        proficiency_bonus: target.proficiency_bonus 
+      }).eq('id', target.id)
+    }
+  }
+
   for (const event of events) {
     try {
-      const targetName = event.data.target?.toLowerCase()
+      const targetName = event.data?.target?.toLowerCase()
       const target = Array.from(characterMap.values()).find(
         c => c.name.toLowerCase() === targetName
       )
@@ -34,8 +66,26 @@ export async function applyEvents(
       else if (event.type === 'xp') {
         const amount = parseInt(event.data.amount || '0', 10)
         for (const c of characterMap.values()) {
-          c.xp = (c.xp || 0) + amount
-          await supabaseAdmin.from('characters').update({ xp: c.xp }).eq('id', c.id)
+          const oldXp = c.xp || 0
+          c.xp = oldXp + amount
+          
+          const newLevel = getLevelFromXP(c.xp)
+          if (newLevel > c.level) {
+            const oldLevel = c.level
+            c.level = newLevel
+            c.proficiency_bonus = getProficiencyBonus(newLevel)
+            
+            // Log leveling up
+            console.log(`Character ${c.name} leveled up from ${oldLevel} to ${newLevel}!`)
+            
+            await supabaseAdmin.from('characters').update({ 
+              xp: c.xp, 
+              level: c.level,
+              proficiency_bonus: c.proficiency_bonus 
+            }).eq('id', c.id)
+          } else {
+            await supabaseAdmin.from('characters').update({ xp: c.xp }).eq('id', c.id)
+          }
         }
       }
       else if (event.type === 'condition_add' && target) {
