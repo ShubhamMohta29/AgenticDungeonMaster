@@ -10,6 +10,12 @@ export type GameEventType =
   | 'loot'
   | 'condition_add'
   | 'condition_remove'
+  | 'inventory_add'
+  | 'inventory_remove'
+  | 'feature_add'
+  | 'ability_update'
+  | 'skill_update'
+  | 'rest'
   | 'roll_request'
 
 export interface GameEvent {
@@ -24,6 +30,7 @@ export interface RollRequest {
   ability?: string
   dc?: number
   target?: string
+  reason?: string
 }
 
 export interface ParsedResponse {
@@ -59,7 +66,8 @@ export function parseGameEvents(raw: string): ParsedResponse {
         skill: attrs.skill,
         ability: attrs.ability,
         dc: attrs.dc ? parseInt(attrs.dc) : undefined,
-        target: attrs.target
+        target: attrs.target,
+        reason: attrs.reason
       })
     } else if (tagName === 'game_event') {
       events.push({
