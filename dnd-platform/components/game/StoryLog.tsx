@@ -35,18 +35,6 @@ function MessageBubble({ message }: { message: Message }) {
     )
   }
 
-  if (message.type === 'dice_roll') {
-    return (
-      <div className="flex justify-center mb-4 animate-fadeIn">
-        <div className="bg-amber-main/20 backdrop-blur-md px-4 py-2 rounded-xl border border-amber-main/30 shadow-inner">
-          <p className="text-sm font-mono text-amber-highlight">
-            🎲 {message.content}
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   if (message.type === 'system') {
     return (
       <div className="mb-4 animate-fadeIn">
@@ -76,7 +64,7 @@ export function StoryLog() {
         </p>
       )}
 
-      {messages.map(message => (
+      {messages.filter(m => m.type !== 'dice_roll').map(message => (
         <MessageBubble key={message.id} message={message} />
       ))}
 

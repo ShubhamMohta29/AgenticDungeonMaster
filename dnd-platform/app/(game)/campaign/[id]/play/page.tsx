@@ -11,7 +11,7 @@ import { StoryLog } from '@/components/game/StoryLog'
 import { ActionPanel } from '@/components/game/ActionPanel'
 import { CharacterPanel } from '@/components/character/CharacterPanel'
 import { InitiativeTracker } from '@/components/game/InitiativeTracker'
-import { DiceRollModal } from '@/components/game/DiceRollModal'
+import { DiceLog } from '@/components/game/DiceLog'
 
 export default function PlayPage() {
   const params = useParams()
@@ -20,7 +20,7 @@ export default function PlayPage() {
   const {
     setCampaign, setCharacters, setMyCharacter,
     addMessage, setEncounter,
-    updateCharacter, setDMThinking, setPendingRollRequest,
+    updateCharacter, setDMThinking,
     setMessages
   } = useGameStore()
 
@@ -159,21 +159,14 @@ export default function PlayPage() {
         return
       }
 
-      if (data.rollRequests?.length > 0) {
-        setPendingRollRequest(data.rollRequests[0])
-      }
+
     } catch (error) {
       console.error('Action failed:', error)
     } finally {
       setDMThinking(false)
     }
-  }, [campaignId, setDMThinking, setPendingRollRequest])
+  }, [campaignId, setDMThinking])
 
-  async function handleRollComplete(result: number, success: boolean) {
-    await handleAction(
-      `I rolled a ${result} — ${success ? 'success' : 'failure'}.`
-    )
-  }
 
   return (
     <div className="relative h-screen w-full overflow-hidden flex">
@@ -183,6 +176,11 @@ export default function PlayPage() {
         <div className="pointer-events-auto">
           <InitiativeTracker />
         </div>
+      </div>
+
+      {/* Left Sidebar: Dice Log */}
+      <div className="relative z-20 h-full hidden lg:block">
+        <DiceLog />
       </div>
 
       {/* Main Content Area */}
@@ -203,7 +201,7 @@ export default function PlayPage() {
         <CharacterPanel />
       </div>
 
-      <DiceRollModal onRollComplete={handleRollComplete} />
+
     </div>
   )
 }

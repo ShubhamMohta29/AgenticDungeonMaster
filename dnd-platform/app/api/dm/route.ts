@@ -5,6 +5,8 @@ import { callGroq } from '@/lib/groq'
 import { parseGameEvents } from '@/lib/gameEvents'
 import { buildDMSystemPrompt } from '@/lib/systemPrompt'
 import { getContextForDM, shouldSummarize, summarizeSession } from '@/lib/worldMemory'
+import { resolveRollRequest } from '@/lib/dice'
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -81,6 +83,33 @@ export async function POST(req: NextRequest) {
     })
 
     const { narration, events, rollRequests } = parseGameEvents(response.content)
+
+    // Handle automated dice rolls
+    if (rollRequests && rollRequests.length > 0) {
+      for (const rollReq of rollRequests) {
+        // Find the character for the roll
+        const char = (characters || []).find(c => 
+          c.name.toLowerCase() === rollReq.character.toLowerCase() || 
+          c.id === rollReq.character
+        )
+        
+        if (char) {
+          const result = resolveRollRequest(rollReq, char as any)
+          
+          // Create a dice roll message
+          await supabaseAdmin.from('messages').insert({
+            campaign_id: campaignId,
+            character_id: char.id,
+            type: 'dice_roll',
+            content: `${char.name} rolled for ${result.purpose || 'a check'}`,
+            metadata: result
+          })
+          
+          console.log(`Automated roll for ${char.name}: ${result.total} (${result.purpose})`)
+        }
+      }
+    }
+
 
     await supabaseAdmin.from('messages').insert({
       campaign_id: campaignId,
