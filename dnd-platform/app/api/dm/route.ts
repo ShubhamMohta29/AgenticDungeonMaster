@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
       memorySummary: dmContext.latestSummary
     })
 
-    const messageHistory = dmContext.recentMessages.map(m => ({
+    // Trim history to save tokens: keep only the last 6 messages
+    const messageHistory = dmContext.recentMessages.slice(-6).map(m => ({
       role: (m.type === 'player_action' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.content
     }))
@@ -79,8 +80,15 @@ export async function POST(req: NextRequest) {
     const response = await callGroq({
       system: systemPrompt,
       messages: messageHistory,
-      maxTokens: 1000
+      maxTokens: 800
     })
+
+    if (response.error) {
+      return NextResponse.json(
+        { error: response.error, retryAfter: response.retryAfter }, 
+        { status: response.status || 500 }
+      )
+    }
 
     const { narration, events, rollRequests } = parseGameEvents(response.content)
 

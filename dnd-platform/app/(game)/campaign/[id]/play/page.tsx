@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useGameStore } from '@/store/gameStore'
@@ -16,6 +16,9 @@ import { DiceLog } from '@/components/game/DiceLog'
 export default function PlayPage() {
   const params = useParams()
   const campaignId = params.id as string
+
+  const [error, setError] = useState<string | null>(null)
+  const [retryIn, setRetryIn] = useState<number | null>(null)
 
   const {
     setCampaign, setCharacters, setMyCharacter,
@@ -39,7 +42,7 @@ export default function PlayPage() {
           supabase.from('campaigns').select('*').eq('id', campaignId).single(),
           supabase.from('characters').select('*').eq('campaign_id', campaignId),
           supabase.from('messages').select('*').eq('campaign_id', campaignId)
-            .order('created_at', { ascending: true }).limit(50)
+            .order('created_at', { ascending: false }).limit(50)
         ])
 
         if (campaignRes.error) console.error('Campaign load error:', campaignRes.error)
@@ -65,7 +68,8 @@ export default function PlayPage() {
 
         if (messagesRes.data) {
           console.log('Messages loaded:', messagesRes.data.length)
-          setMessages(messagesRes.data)
+          // Reverse them so they are in chronological order for display
+          setMessages([...messagesRes.data].reverse())
         }
       } catch (err) {
         console.error('Failed to load initial game data:', err)
@@ -74,6 +78,15 @@ export default function PlayPage() {
 
     loadData()
   }, [campaignId, setCampaign, setCharacters, setMyCharacter, setMessages])
+
+  // Retry timer countdown
+  useEffect(() => {
+    if (retryIn === null || retryIn <= 0) return
+    const timer = setInterval(() => {
+      setRetryIn(prev => (prev && prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [retryIn])
 
   // Realtime subscriptions
   useEffect(() => {
@@ -93,9 +106,9 @@ export default function PlayPage() {
             .from('messages')
             .select('*')
             .eq('campaign_id', campaignId)
-            .order('created_at', { ascending: true })
+            .order('created_at', { ascending: false })
             .limit(50)
-          if (data) setMessages(data)
+          if (data) setMessages([...data].reverse())
         }
       })
 
@@ -140,7 +153,10 @@ export default function PlayPage() {
 
     const { myCharacter } = useGameStore.getState()
 
+    setError(null)
+    setRetryIn(null)
     setDMThinking(true)
+    
     try {
       const response = await fetch('/api/dm', {
         method: 'POST',
@@ -155,13 +171,16 @@ export default function PlayPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        console.error('DM API error:', data.error)
+        setError(data.error || 'The Dungeon Master is currently overwhelmed.')
+        if (response.status === 429 && data.retryAfter) {
+          setRetryIn(data.retryAfter)
+        }
         return
       }
 
-
     } catch (error) {
       console.error('Action failed:', error)
+      setError('Connection lost. Please check your internet.')
     } finally {
       setDMThinking(false)
     }
@@ -192,6 +211,27 @@ export default function PlayPage() {
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 z-30">
+          {error && (
+            <div className="max-w-xl mx-auto mb-4 animate-in fade-in slide-in-from-bottom-4">
+              <div className="bg-red-500/20 backdrop-blur-md border border-red-500/30 p-4 rounded-2xl flex items-center gap-3 shadow-2xl">
+                <span className="text-xl">⚠️</span>
+                <div className="flex-1">
+                  <p className="text-red-100 text-sm font-medium">{error}</p>
+                  {retryIn !== null && retryIn > 0 && (
+                    <p className="text-red-200/60 text-[10px] uppercase tracking-widest mt-1 font-bold">
+                      Available again in {retryIn}s
+                    </p>
+                  )}
+                </div>
+                <button 
+                  onClick={() => setError(null)}
+                  className="p-2 hover:bg-white/5 rounded-lg transition-colors text-red-200/40 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
           <ActionPanel onAction={handleAction} />
         </div>
       </div>
@@ -200,8 +240,6 @@ export default function PlayPage() {
       <div className="relative z-20 h-full">
         <CharacterPanel />
       </div>
-
-
     </div>
   )
 }
