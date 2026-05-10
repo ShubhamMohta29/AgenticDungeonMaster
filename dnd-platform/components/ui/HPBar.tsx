@@ -6,7 +6,7 @@ interface HPBarProps {
 }
 
 export function HPBar({ current, max, showNumbers = true, height = 'h-2' }: HPBarProps) {
-  const pct = Math.max(0, Math.min(100, Math.round((current / max) * 100)))
+  const pct = max > 0 ? Math.max(0, Math.min(100, Math.round((current / max) * 100))) : 0
   const color = pct > 50 ? 'bg-green-500' : pct > 25 ? 'bg-amber-500' : 'bg-red-500'
 
   return (

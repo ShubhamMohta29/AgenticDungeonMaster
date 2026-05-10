@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { supabaseAdmin } from '@/lib/supabaseServer'
+import { supabaseAdmin, getAuthenticatedUser } from '@/lib/supabaseServer'
 import { callClaudeHaiku } from '@/lib/claude'
 
 export async function POST(req: NextRequest) {
   try {
     const { campaignId, prompt } = await req.json()
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } }
-    )
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getAuthenticatedUser(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { data: campaign } = await supabaseAdmin

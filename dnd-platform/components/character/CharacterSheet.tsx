@@ -189,7 +189,7 @@ export function CharacterSheet({ character, onClose }: CharacterSheetProps) {
                 <p className="text-sm text-gray-400 text-center mt-8">No items.</p>
               ) : (
                 character.inventory.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div key={`${item.name}-${i}`} className="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-white">{item.name}</p>
                       <p className="text-xs text-gray-400">{item.weight}lb · {item.value}gp</p>
@@ -210,7 +210,7 @@ export function CharacterSheet({ character, onClose }: CharacterSheetProps) {
                 <p className="text-sm text-gray-400 text-center mt-8">No features.</p>
               ) : (
                 character.features.map((feature, i) => (
-                  <div key={i} className="border border-white/10 rounded-lg p-3">
+                  <div key={`${feature.name}-${i}`} className="border border-white/10 rounded-lg p-3">
                     <p className="text-sm font-medium text-white mb-1">{feature.name}</p>
                     <p className="text-xs text-gray-400 leading-relaxed">{feature.description}</p>
                   </div>

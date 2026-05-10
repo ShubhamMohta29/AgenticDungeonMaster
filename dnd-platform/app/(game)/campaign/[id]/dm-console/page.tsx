@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useGameStore } from '@/store/gameStore'
 import type { Character } from '@/types/character'
+import type { Message } from '@/types/message'
 import { StoryLog } from '@/components/game/StoryLog'
 import { DMNarrationInput } from '@/components/dm/DMNarrationInput'
 import { AICopilot } from '@/components/dm/AICopilot'
@@ -22,11 +23,12 @@ export default function DMConsolePage() {
   const [activePanel, setActivePanel] = useState<Panel>('party')
   const [narrationDraft, setNarrationDraft] = useState('')
   const [campaign, setCampaignLocal] = useState<{ name: string; setting: string; dm_mode: string } | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+      if (!user) { router.push('/login'); setAuthChecked(true); return }
 
       const [campaignRes, charactersRes, messagesRes] = await Promise.all([
         supabase.from('campaigns').select('*').eq('id', campaignId).single(),
@@ -42,12 +44,14 @@ export default function DMConsolePage() {
         // Redirect if not human DM campaign
         if (campaignRes.data.dm_mode !== 'human' || campaignRes.data.dm_user_id !== user.id) {
           router.push(`/campaign/${campaignId}/play`)
+          setAuthChecked(true)
           return
         }
       }
 
       if (charactersRes.data) setCharacters(charactersRes.data)
       if (messagesRes.data) setMessages(messagesRes.data)
+      setAuthChecked(true)
     }
 
     load()
@@ -60,7 +64,7 @@ export default function DMConsolePage() {
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public',
         table: 'messages', filter: `campaign_id=eq.${campaignId}`
-      }, payload => addMessage(payload.new as never))
+      }, payload => addMessage(payload.new as Message))
       .subscribe()
 
     const charactersSub = supabase
@@ -82,6 +86,10 @@ export default function DMConsolePage() {
     { id: 'tools',   label: '🎲 Tools' },
     { id: 'copilot', label: '🤖 AI Assist' },
   ]
+
+  if (!authChecked) {
+    return <div>Loading...</div>
+  }
 
   return (
     <div className="flex h-screen">

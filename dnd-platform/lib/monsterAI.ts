@@ -1,4 +1,4 @@
-import { callClaude } from './groq'
+import { callGroq } from './groq'
 import { resolveAttack } from './combatEngine'
 import type { Combatant, Monster, ActionResult } from '@/types/combat'
 
@@ -53,7 +53,7 @@ ${alivePlayers.map(p => `- ${p.name}: HP ${p.hp}/${p.max_hp}, AC ${p.ac}, Condit
 Decide the most tactically interesting action. Respond with JSON only:
 { "attack_name": "attack to use", "target": "target name", "reasoning": "brief reason" }`
 
-    const response = await callClaude({
+    const response = await callGroq({
       system: 'You are a D&D 5e monster controller. Respond only with valid JSON.',
       messages: [{ role: 'user', content: prompt }],
       maxTokens: 200

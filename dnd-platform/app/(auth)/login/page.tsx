@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
@@ -66,7 +67,7 @@ export default function LoginPage() {
 
         <p className="text-sm text-center text-gray-400">
           No account?{' '}
-          <a href="/register" className="text-amber-highlight hover:underline">Create one</a>
+          <Link href="/register" className="text-amber-highlight hover:underline">Create one</Link>
         </p>
       </div>
     </div>

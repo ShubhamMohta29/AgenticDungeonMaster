@@ -9,7 +9,14 @@ export function CharacterPanel() {
   const { myCharacter } = useGameStore()
   const [showSheet, setShowSheet] = useState(false)
 
-  if (!myCharacter) return null
+  if (!myCharacter) {
+    return (
+      <div className="w-80 border-l border-white/10 glass p-6 flex flex-col items-center justify-center gap-3 text-center">
+        <p className="text-gray-400 text-sm">No character found</p>
+        <p className="text-gray-600 text-xs">Create a character to see your stats here.</p>
+      </div>
+    )
+  }
 
   const conditionColors: Record<string, 'red' | 'amber' | 'gold' | 'gray'> = {
     poisoned: 'red', unconscious: 'red', paralyzed: 'red',

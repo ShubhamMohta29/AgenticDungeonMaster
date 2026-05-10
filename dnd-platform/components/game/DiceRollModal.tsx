@@ -2,20 +2,80 @@
 import { useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { Button } from '@/components/ui/Button'
+import type { AbilityScores } from '@/types/character'
 
 interface DiceRollModalProps {
   onRollComplete: (result: number, success: boolean) => void
 }
 
+const SKILL_TO_ABILITY: Record<string, keyof AbilityScores> = {
+  // Strength
+  Athletics: 'str',
+  // Dexterity
+  Acrobatics: 'dex',
+  'Sleight of Hand': 'dex',
+  Stealth: 'dex',
+  // Intelligence
+  Arcana: 'int',
+  History: 'int',
+  Investigation: 'int',
+  Nature: 'int',
+  Religion: 'int',
+  // Wisdom
+  'Animal Handling': 'wis',
+  Insight: 'wis',
+  Medicine: 'wis',
+  Perception: 'wis',
+  Survival: 'wis',
+  // Charisma
+  Deception: 'cha',
+  Intimidation: 'cha',
+  Performance: 'cha',
+  Persuasion: 'cha',
+}
+
 export function DiceRollModal({ onRollComplete }: DiceRollModalProps) {
-  const { pendingRollRequest, setPendingRollRequest } = useGameStore()
+  const { pendingRollRequest, setPendingRollRequest, myCharacter } = useGameStore()
   const [rolling, setRolling] = useState(false)
   const [result, setResult] = useState<{ roll: number; total: number; success: boolean } | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   if (!pendingRollRequest) return null
 
+  function computeModifier(): number {
+    if (!myCharacter) return 0
+    const scores = myCharacter.ability_scores
+    const profBonus = myCharacter.proficiency_bonus
+
+    function abilityMod(ability: string): number {
+      const score = scores[ability as keyof typeof scores]
+      return score !== undefined ? Math.floor((score - 10) / 2) : 0
+    }
+
+    if (pendingRollRequest!.type === 'skill') {
+      const skillName = pendingRollRequest!.skill ?? ''
+      const ability = SKILL_TO_ABILITY[skillName]
+      if (!ability) return 0
+      const mod = abilityMod(ability)
+      const proficient = myCharacter.skills[skillName] === true
+      return mod + (proficient ? profBonus : 0)
+    }
+
+    if (pendingRollRequest!.type === 'saving_throw') {
+      const ability = pendingRollRequest!.ability ?? ''
+      const mod = abilityMod(ability)
+      const proficient = myCharacter.saving_throws[ability] === true
+      return mod + (proficient ? profBonus : 0)
+    }
+
+    // 'ability' or 'attack'
+    const ability = pendingRollRequest!.ability ?? ''
+    return abilityMod(ability)
+  }
+
   async function handleRoll() {
     setRolling(true)
+    setError(null)
     try {
       const response = await fetch('/api/dice', {
         method: 'POST',
@@ -24,12 +84,13 @@ export function DiceRollModal({ onRollComplete }: DiceRollModalProps) {
       })
       const data = await response.json()
       const roll = data.rolls[0]
-      const total = roll + 3 // TODO: use actual modifier
+      const modifier = computeModifier()
+      const total = roll + modifier
       const success = pendingRollRequest?.dc ? total >= pendingRollRequest.dc : true
 
       setResult({ roll, total, success })
     } catch {
-      setResult({ roll: 10, total: 13, success: true })
+      setError('Dice roll failed. Please try again.')
     }
     setRolling(false)
   }
@@ -54,7 +115,14 @@ export function DiceRollModal({ onRollComplete }: DiceRollModalProps) {
           <p className="text-sm text-gray-400 mb-6">DC {pendingRollRequest.dc}</p>
         )}
 
-        {!result ? (
+        {error ? (
+          <div className="space-y-4">
+            <p className="text-sm text-red-400">{error}</p>
+            <Button onClick={handleRoll} variant="primary" className="w-full">
+              Retry
+            </Button>
+          </div>
+        ) : !result ? (
           <button
             onClick={handleRoll}
             disabled={rolling}
