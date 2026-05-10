@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
     }
 
-    let turnOrder: Combatant[] = [...typedEncounter.turn_order]
+    const turnOrder: Combatant[] = [...typedEncounter.turn_order]
     const monsters = typedEncounter.monsters
 
     const actorIndex = turnOrder.findIndex(c => c.id === action.actorId)
