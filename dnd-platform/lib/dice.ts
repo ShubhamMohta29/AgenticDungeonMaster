@@ -79,7 +79,7 @@ export function resolveRollRequest(request: RollRequest, character: Character): 
     dc: request.dc,
     success: request.dc ? total >= request.dc : undefined,
     skill: request.skill || request.ability || label,
-    purpose: label
+    purpose: request.reason || label
   }
 }
 

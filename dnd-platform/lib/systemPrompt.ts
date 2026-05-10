@@ -52,7 +52,7 @@ For loot:      <loot item='Potion of Healing' quantity='2'/>
 For new NPC:   <new_npc name='Brother Aldric' description='A nervous monk' disposition='neutral'/>
 For scene:     <scene_update description='A dimly lit tavern with rough-hewn tables.'/>
 For combat:    <start_combat monsters='Goblin,Goblin,Hobgoblin'/>
-For rolls:     <roll_request character='CharacterName' type='skill' skill='Stealth' dc='14'/>
+For rolls:     <roll_request character='CharacterName' type='skill' skill='Stealth' dc='14' reason='Sneak past the sleeping guard'/>
 For quests:    <new_quest title='The Missing Acolyte' description='...' xp_reward='200'/>
 
 5. Only call for rolls when the outcome is genuinely uncertain and the stakes matter.

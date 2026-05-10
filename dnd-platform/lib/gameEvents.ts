@@ -24,6 +24,7 @@ export interface RollRequest {
   ability?: string
   dc?: number
   target?: string
+  reason?: string
 }
 
 export interface ParsedResponse {
@@ -59,7 +60,8 @@ export function parseGameEvents(raw: string): ParsedResponse {
         skill: attrs.skill,
         ability: attrs.ability,
         dc: attrs.dc ? parseInt(attrs.dc) : undefined,
-        target: attrs.target
+        target: attrs.target,
+        reason: attrs.reason
       })
     } else if (tagName === 'game_event') {
       events.push({
