@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { HPBar } from '@/components/ui/HPBar'
+import { XPBar } from '@/components/ui/XPBar'
 import { Badge } from '@/components/ui/Badge'
 import { CharacterSheet } from './CharacterSheet'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
@@ -67,9 +68,8 @@ export function CharacterPanel() {
         </div>
 
         {/* XP */}
-        <div className="flex justify-between items-center text-xs">
-          <span className="text-gray-500 font-bold uppercase tracking-wider">XP</span>
-          <span className="text-white font-medium">{myCharacter.xp}</span>
+        <div>
+          <XPBar currentXp={myCharacter.xp} level={myCharacter.level} />
         </div>
 
         {/* Ability scores */}
