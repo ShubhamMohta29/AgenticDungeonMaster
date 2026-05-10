@@ -1,7 +1,7 @@
 import type { Campaign, WorldState } from '@/types/campaign'
 import type { Character } from '@/types/character'
 import type { NPC } from '@/types/npc'
-import type { Quest } from '@/types/npc'
+import type { Quest } from '@/types/quest'
 
 export interface SystemPromptContext {
   campaign: Campaign

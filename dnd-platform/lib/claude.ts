@@ -1,29 +1,13 @@
-//to be used when i have API creds for claude.
 import Anthropic from '@anthropic-ai/sdk'
+import type { AIRequest, AIResponse } from './aiTypes'
+
+export type { AIMessage, AIRequest, AIResponse } from './aiTypes'
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!
 })
 
-export interface ClaudeMessage {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-export interface ClaudeRequest {
-  system: string
-  messages: ClaudeMessage[]
-  maxTokens?: number
-  model?: string
-}
-
-export interface ClaudeResponse {
-  content: string
-  inputTokens: number
-  outputTokens: number
-}
-
-export async function callClaude(req: ClaudeRequest): Promise<ClaudeResponse> {
+export async function callClaude(req: AIRequest): Promise<AIResponse> {
   const maxRetries = 3
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -64,7 +48,7 @@ export async function callClaude(req: ClaudeRequest): Promise<ClaudeResponse> {
   throw new Error('Claude API failed after maximum retries')
 }
 
-export async function callClaudeHaiku(req: ClaudeRequest): Promise<ClaudeResponse> {
+export async function callClaudeHaiku(req: AIRequest): Promise<AIResponse> {
   return callClaude({
     ...req,
     model: 'claude-haiku-4-5-20251001',

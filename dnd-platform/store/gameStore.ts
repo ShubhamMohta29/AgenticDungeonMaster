@@ -3,6 +3,9 @@ import type { Campaign } from '@/types/campaign'
 import type { Character } from '@/types/character'
 import type { Message } from '@/types/message'
 import type { CombatEncounter } from '@/types/combat'
+import type { RollRequest } from '@/lib/gameEvents'
+
+export type { RollRequest } from '@/lib/gameEvents'
 
 interface GameStore {
   campaign: Campaign | null
@@ -24,15 +27,6 @@ interface GameStore {
   setLoading: (loading: boolean) => void
   setDMThinking: (thinking: boolean) => void
   setPendingRollRequest: (roll: RollRequest | null) => void
-}
-
-export interface RollRequest {
-  character: string
-  type: 'skill' | 'saving_throw' | 'attack' | 'ability'
-  skill?: string
-  ability?: string
-  dc?: number
-  target?: string
 }
 
 export const useGameStore = create<GameStore>((set) => ({

@@ -11,26 +11,37 @@ export const DMNarrationInput = ({ campaignId, characters }: DMNarrationInputPro
   const [whisperTarget, setWhisperTarget] = useState('')
   const [loading, setLoading]           = useState(false)
   const [sent, setSent]                 = useState(false)
+  const [error, setError]               = useState('')
 
   async function handleSend() {
     if (!content.trim()) return
     setLoading(true)
+    setError('')
 
-    await fetch('/api/dm-console/narrate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        campaignId,
-        content: content.trim(),
-        targetCharacterId: whisperTarget || null
+    try {
+      const response = await fetch('/api/dm-console/narrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId,
+          content: content.trim(),
+          targetCharacterId: whisperTarget || null
+        })
       })
-    })
 
-    setContent('')
-    setWhisperTarget('')
-    setLoading(false)
-    setSent(true)
-    setTimeout(() => setSent(false), 2000)
+      if (!response.ok) {
+        throw new Error('Failed to send narration')
+      }
+
+      setContent('')
+      setWhisperTarget('')
+      setSent(true)
+      setTimeout(() => setSent(false), 2000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -46,6 +57,8 @@ export const DMNarrationInput = ({ campaignId, characters }: DMNarrationInputPro
         rows={4}
         className="w-full text-sm px-3 py-2 border border-white/10 rounded-lg bg-white/5 dark:bg-black/20 text-white placeholder-gray-500 focus:outline-none focus:border-amber-highlight resize-none"
       />
+
+      {error && <p className="text-sm text-red-500">{error}</p>}
 
       <div className="flex items-center gap-2">
         <select

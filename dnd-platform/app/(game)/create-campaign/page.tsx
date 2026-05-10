@@ -110,7 +110,7 @@ export default function CreateCampaignPage() {
               }`}
             >
               <p className="font-medium text-white text-sm">AI Dungeon Master</p>
-              <p className="text-xs text-gray-400 mt-1">Claude runs the world autonomously</p>
+              <p className="text-xs text-gray-400 mt-1">AI runs the world autonomously</p>
             </button>
             <button
               onClick={() => setDmMode('human')}

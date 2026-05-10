@@ -4,6 +4,8 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useGameStore } from '@/store/gameStore'
 import type { Character } from '@/types/character'
+import type { CombatEncounter } from '@/types/combat'
+import type { Message } from '@/types/message'
 
 import { StoryLog } from '@/components/game/StoryLog'
 import { ActionPanel } from '@/components/game/ActionPanel'
@@ -17,8 +19,9 @@ export default function PlayPage() {
 
   const {
     setCampaign, setCharacters, setMyCharacter,
-    setMessages, addMessage, setEncounter,
-    updateCharacter, setDMThinking, setPendingRollRequest
+    addMessage, setEncounter,
+    updateCharacter, setDMThinking, setPendingRollRequest,
+    setMessages
   } = useGameStore()
 
   // Load initial data
@@ -35,11 +38,13 @@ export default function PlayPage() {
       ])
 
       if (campaignRes.data) setCampaign(campaignRes.data)
+
       if (charactersRes.data) {
         setCharacters(charactersRes.data)
         const mine = charactersRes.data.find(c => c.user_id === user.id)
         if (mine) setMyCharacter(mine)
       }
+
       if (messagesRes.data) setMessages(messagesRes.data)
     }
 
@@ -56,9 +61,19 @@ export default function PlayPage() {
         table: 'messages',
         filter: `campaign_id=eq.${campaignId}`
       }, payload => {
-        addMessage(payload.new as never)
+        addMessage(payload.new as Message)
       })
-      .subscribe()
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          const { data } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('campaign_id', campaignId)
+            .order('created_at', { ascending: true })
+            .limit(50)
+          if (data) setMessages(data)
+        }
+      })
 
     const charactersSub = supabase
       .channel(`characters:${campaignId}`)
@@ -80,7 +95,11 @@ export default function PlayPage() {
         table: 'combat_encounters',
         filter: `campaign_id=eq.${campaignId}`
       }, payload => {
-        setEncounter(payload.new as never)
+        if (payload.eventType === 'DELETE') {
+          setEncounter(null)
+        } else {
+          setEncounter(payload.new as CombatEncounter)
+        }
       })
       .subscribe()
 
@@ -89,7 +108,7 @@ export default function PlayPage() {
       supabase.removeChannel(charactersSub)
       supabase.removeChannel(combatSub)
     }
-  }, [campaignId, addMessage, updateCharacter, setEncounter])
+  }, [campaignId, addMessage, updateCharacter, setEncounter, setMessages])
 
   const handleAction = useCallback(async (action: string) => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -110,6 +129,11 @@ export default function PlayPage() {
       })
 
       const data = await response.json()
+
+      if (!response.ok) {
+        console.error('DM API error:', data.error)
+        return
+      }
 
       if (data.rollRequests?.length > 0) {
         setPendingRollRequest(data.rollRequests[0])

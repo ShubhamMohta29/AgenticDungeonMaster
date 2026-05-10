@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { supabaseAdmin } from '@/lib/supabaseServer'
-import { callClaude } from '@/lib/groq'
+import { supabaseAdmin, getAuthenticatedUser } from '@/lib/supabaseServer'
+import { applyEvents } from '@/lib/gameEventApplier'
+import { callGroq } from '@/lib/groq'
 import { parseGameEvents } from '@/lib/gameEvents'
 import { buildDMSystemPrompt } from '@/lib/systemPrompt'
 import { getContextForDM, shouldSummarize, summarizeSession } from '@/lib/worldMemory'
@@ -11,27 +11,25 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { campaignId, action, characterId } = body
 
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     if (!campaignId || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
+    if (typeof action !== 'string' || action.length > 2000) {
+      return NextResponse.json({ error: 'Action must be a string under 2000 characters' }, { status: 400 })
+    }
+    if (!UUID_REGEX.test(campaignId)) {
+      return NextResponse.json({ error: 'Invalid campaignId' }, { status: 400 })
+    }
+    if (characterId && !UUID_REGEX.test(characterId)) {
+      return NextResponse.json({ error: 'Invalid characterId' }, { status: 400 })
+    }
 
-    // Auth check
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => req.cookies.getAll(),
-          setAll: () => {}
-        }
-      }
-    )
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getAuthenticatedUser(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Verify user is a member of this campaign
     const { data: membership } = await supabaseAdmin
       .from('campaign_members')
       .select('id')
@@ -43,7 +41,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
     }
 
-    // Fetch all context
     const [
       { data: campaign },
       { data: characters },
@@ -62,7 +59,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     }
 
-    // Build system prompt
     const systemPrompt = buildDMSystemPrompt({
       campaign,
       characters: characters || [],
@@ -71,26 +67,21 @@ export async function POST(req: NextRequest) {
       memorySummary: dmContext.latestSummary
     })
 
-    // Build message history from recent messages
     const messageHistory = dmContext.recentMessages.map(m => ({
       role: (m.type === 'player_action' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.content
     }))
 
-    // Add current player action
     messageHistory.push({ role: 'user', content: action })
 
-    // Call Claude
-    const response = await callClaude({
+    const response = await callGroq({
       system: systemPrompt,
       messages: messageHistory,
       maxTokens: 1000
     })
 
-    // Parse game events from response
     const { narration, events, rollRequests } = parseGameEvents(response.content)
 
-    // Save player action to messages
     await supabaseAdmin.from('messages').insert({
       campaign_id: campaignId,
       character_id: characterId || null,
@@ -98,7 +89,6 @@ export async function POST(req: NextRequest) {
       content: action
     })
 
-    // Save DM narration to messages
     const { data: savedMessage } = await supabaseAdmin
       .from('messages')
       .insert({
@@ -111,19 +101,8 @@ export async function POST(req: NextRequest) {
       .select()
       .single()
 
-    // Apply game events
     await applyEvents(events, campaignId, characters || [])
 
-    // Update scene if scene_update event present
-    const sceneUpdate = events.find(e => e.type === 'scene_update')
-    if (sceneUpdate?.data.description) {
-      await supabaseAdmin
-        .from('campaigns')
-        .update({ current_scene: sceneUpdate.data.description })
-        .eq('id', campaignId)
-    }
-
-    // Trigger background summarization if needed
     const needsSummary = await shouldSummarize(campaignId)
     if (needsSummary) {
       summarizeSession(campaignId, dmContext.recentMessages).catch(console.error)
@@ -142,71 +121,3 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function applyEvents(
-  events: { type: string; data: Record<string, string> }[],
-  campaignId: string,
-  characters: { id: string; name: string; hp: number; max_hp: number; xp: number }[]
-) {
-  for (const event of events) {
-    try {
-      if (event.type === 'damage') {
-        const target = characters.find(
-          c => c.name.toLowerCase() === event.data.target?.toLowerCase()
-        )
-        if (target) {
-          const newHp = Math.max(0, target.hp - parseInt(event.data.amount || '0'))
-          await supabaseAdmin
-            .from('characters')
-            .update({ hp: newHp })
-            .eq('id', target.id)
-        }
-      }
-
-      if (event.type === 'heal') {
-        const target = characters.find(
-          c => c.name.toLowerCase() === event.data.target?.toLowerCase()
-        )
-        if (target) {
-          const newHp = Math.min(target.max_hp, target.hp + parseInt(event.data.amount || '0'))
-          await supabaseAdmin
-            .from('characters')
-            .update({ hp: newHp })
-            .eq('id', target.id)
-        }
-      }
-
-      if (event.type === 'xp') {
-        const amount = parseInt(event.data.amount || '0')
-        for (const character of characters) {
-          await supabaseAdmin
-            .from('characters')
-            .update({ xp: character.xp + amount })
-            .eq('id', character.id)
-        }
-      }
-
-      if (event.type === 'new_npc') {
-        await supabaseAdmin.from('npcs').insert({
-          campaign_id: campaignId,
-          name: event.data.name,
-          description: event.data.description,
-          disposition: event.data.disposition || 'unknown'
-        })
-      }
-
-      if (event.type === 'new_quest') {
-        await supabaseAdmin.from('quests').insert({
-          campaign_id: campaignId,
-          title: event.data.title,
-          description: event.data.description,
-          xp_reward: parseInt(event.data.xp_reward || '0'),
-          status: 'active',
-          objectives: []
-        })
-      }
-
-    } catch (err) {
-      console.error(`Failed to apply event ${event.type}:`, err)
-    }
-  }
-}

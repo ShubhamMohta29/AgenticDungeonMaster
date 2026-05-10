@@ -30,7 +30,7 @@ export const DMToolbox = ({ campaignId, characters }: DMToolboxProps) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         campaignId,
-        content: `⭐ The DM awards ${amount} XP to the party!`
+        content: `⭐ The DM awards ${amount} XP to the party! <game_event type='xp' amount='${amount}' reason='DM award'/>`
       })
     })
 

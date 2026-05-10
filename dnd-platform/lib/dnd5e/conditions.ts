@@ -106,6 +106,7 @@ export function getConditionEffects(conditions: Condition[]): ConditionEffect {
     if (effect.attackRollDisadvantage) combined.attackRollDisadvantage = true
     if (effect.attackRollAdvantage)    combined.attackRollAdvantage = true
     if (effect.attacksAgainstAdvantage) combined.attacksAgainstAdvantage = true
+    if (effect.attacksAgainstDisadvantage) combined.attacksAgainstDisadvantage = true
     if (effect.speedZero)              combined.speedZero = true
     if (effect.cannotAct)              combined.cannotAct = true
     if (effect.autoFailStrDex)         combined.autoFailStrDex = true

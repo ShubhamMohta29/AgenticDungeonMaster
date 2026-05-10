@@ -62,7 +62,18 @@ export default function DashboardPage() {
       user_id: user.id
     })
 
-    router.push(`/campaign/${campaign.id}/create-character`)
+    const { data: existingCharacter } = await supabase
+      .from('characters')
+      .select('id')
+      .eq('campaign_id', campaign.id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (existingCharacter) {
+      router.push(`/campaign/${campaign.id}/play`)
+    } else {
+      router.push(`/campaign/${campaign.id}/create-character`)
+    }
   }
 
   async function handleSignOut() {
@@ -110,49 +121,49 @@ export default function DashboardPage() {
         ) : (
           <div className="grid gap-4 mb-6">
             {campaigns.map(campaign => (
-  <div
-    key={campaign.id}
-    className="glass rounded-2xl p-6 flex items-center justify-between hover:border-amber-main transition-colors"
-  >
-    <div
-      className="flex-1 cursor-pointer"
-      onClick={() => router.push(`/campaign/${campaign.id}/play`)}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <h2 className="font-semibold text-white">
-          {campaign.name}
-        </h2>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${
-          campaign.dm_mode === 'ai'
-            ? 'bg-amber-main/20 text-amber-highlight border border-amber-main/30'
-            : 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-        }`}>
-          {campaign.dm_mode === 'ai' ? 'AI DM' : 'Human DM'}
-        </span>
-      </div>
-      <p className="text-sm text-gray-500 dark:text-gray-400">{campaign.setting}</p>
-      <p className="text-xs text-gray-400 mt-1">
-        {campaign.session_count} sessions · Invite: {campaign.invite_code}
-      </p>
-    </div>
-    <div className="flex flex-col gap-2 ml-4">
-      <button
-        onClick={() => router.push(`/campaign/${campaign.id}/play`)}
-        className="text-xs px-3 py-1.5 btn-amber rounded-lg transition-colors"
-      >
-        Play →
-      </button>
-      {campaign.dm_mode === 'human' && (
-        <button
-          onClick={() => router.push(`/campaign/${campaign.id}/dm-console`)}
-          className="text-xs px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-        >
-          DM Console
-        </button>
-      )}
-    </div>
-  </div>
-))}
+              <div
+                key={campaign.id}
+                className="glass rounded-2xl p-6 flex items-center justify-between hover:border-amber-main transition-colors"
+              >
+                <div
+                  className="flex-1 cursor-pointer"
+                  onClick={() => router.push(`/campaign/${campaign.id}/play`)}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <h2 className="font-semibold text-white">
+                      {campaign.name}
+                    </h2>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      campaign.dm_mode === 'ai'
+                        ? 'bg-amber-main/20 text-amber-highlight border border-amber-main/30'
+                        : 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                    }`}>
+                      {campaign.dm_mode === 'ai' ? 'AI DM' : 'Human DM'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{campaign.setting}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {campaign.session_count} sessions · Invite: {campaign.invite_code}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 ml-4">
+                  <button
+                    onClick={() => router.push(`/campaign/${campaign.id}/play`)}
+                    className="text-xs px-3 py-1.5 btn-amber rounded-lg transition-colors"
+                  >
+                    Play →
+                  </button>
+                  {campaign.dm_mode === 'human' && (
+                    <button
+                      onClick={() => router.push(`/campaign/${campaign.id}/dm-console`)}
+                      className="text-xs px-3 py-1.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      DM Console
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

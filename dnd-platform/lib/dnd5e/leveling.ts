@@ -16,8 +16,8 @@ export function getLevelFromXP(xp: number): number {
   return 1
 }
 
-export function xpForNextLevel(level: number): number {
-  if (level >= 20) return XP_THRESHOLDS[19]
+export function xpForNextLevel(level: number): number | null {
+  if (level >= 20) return null
   return XP_THRESHOLDS[level]
 }
 

@@ -1,10 +1,8 @@
-export {}
-
 import { rollDice } from './dice'
 import { getModifier, getSavingThrowModifier } from './dnd5e/abilities'
 import { getConditionEffects, addCondition, removeCondition } from './dnd5e/conditions'
 import { getMonster } from './dnd5e/monsters'
-import type { Combatant, Monster, ActionResult, TurnAction, Condition } from '@/types/combat'
+import type { Combatant, Monster, ActionResult, TurnAction, Condition, DamageType } from '@/types/combat'
 import type { Character } from '@/types/character'
 
 export function buildCombatants(
@@ -56,7 +54,7 @@ export function buildCombatants(
     })
   }
 
-  // Sort by initiative descending, ties broken by DEX
+  // Sort by initiative descending (ties are not further broken)
   return combatants.sort((a, b) => b.initiative - a.initiative)
 }
 
@@ -90,8 +88,9 @@ export function resolveAttack(
 
   if (isCrit || total >= target.ac) {
     const damageRoll = rollDice(damageDice)
+    const diceOnly = damageRoll.rolls.reduce((a, b) => a + b, 0)
     const damage = isCrit
-      ? damageRoll.total + rollDice(damageDice).total
+      ? diceOnly + rollDice(damageDice).total
       : damageRoll.total
 
     return {
@@ -116,13 +115,14 @@ export function resolveAttack(
 export function applyDamage(
   target: Combatant,
   amount: number,
-  monsters: Monster[]
+  monsters: Monster[],
+  damageType?: DamageType
 ): { updatedTarget: Combatant; isDead: boolean } {
   const monster = monsters.find(m => m.name === target.name)
 
-  // Check resistances
+  // Check immunities for the specific damage type
   let finalDamage = amount
-  if (monster?.damage_immunities?.length) {
+  if (damageType && monster?.damage_immunities?.includes(damageType)) {
     finalDamage = 0
   }
 
@@ -153,19 +153,20 @@ export function applyHealing(target: Combatant, amount: number): Combatant {
 export function advanceTurn(
   turnOrder: Combatant[],
   currentIndex: number
-): { nextIndex: number; newRound: boolean } {
+): { nextIndex: number; newRound: boolean; updatedTurnOrder: Combatant[] } {
   const nextIndex = (currentIndex + 1) % turnOrder.length
   const newRound = nextIndex === 0
 
-  // Reset actions for the next combatant
-  turnOrder[nextIndex] = {
-    ...turnOrder[nextIndex],
+  // Reset actions for the next combatant (immutable)
+  const updatedTurnOrder = [...turnOrder]
+  updatedTurnOrder[nextIndex] = {
+    ...updatedTurnOrder[nextIndex],
     has_acted: false,
     has_bonus_action: false,
     has_reaction: true
   }
 
-  return { nextIndex, newRound }
+  return { nextIndex, newRound, updatedTurnOrder }
 }
 
 export function checkCombatEnd(turnOrder: Combatant[]): {
