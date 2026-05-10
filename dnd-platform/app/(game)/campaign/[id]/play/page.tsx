@@ -27,25 +27,49 @@ export default function PlayPage() {
   // Load initial data
   useEffect(() => {
     async function loadData() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        console.log('Fetching campaign data for:', campaignId)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          console.warn('No authenticated user found in PlayPage')
+          return
+        }
 
-      const [campaignRes, charactersRes, messagesRes] = await Promise.all([
-        supabase.from('campaigns').select('*').eq('id', campaignId).single(),
-        supabase.from('characters').select('*').eq('campaign_id', campaignId),
-        supabase.from('messages').select('*').eq('campaign_id', campaignId)
-          .order('created_at', { ascending: true }).limit(50)
-      ])
+        const [campaignRes, charactersRes, messagesRes] = await Promise.all([
+          supabase.from('campaigns').select('*').eq('id', campaignId).single(),
+          supabase.from('characters').select('*').eq('campaign_id', campaignId),
+          supabase.from('messages').select('*').eq('campaign_id', campaignId)
+            .order('created_at', { ascending: true }).limit(50)
+        ])
 
-      if (campaignRes.data) setCampaign(campaignRes.data)
+        if (campaignRes.error) console.error('Campaign load error:', campaignRes.error)
+        if (charactersRes.error) console.error('Characters load error:', charactersRes.error)
+        if (messagesRes.error) console.error('Messages load error:', messagesRes.error)
 
-      if (charactersRes.data) {
-        setCharacters(charactersRes.data)
-        const mine = charactersRes.data.find(c => c.user_id === user.id)
-        if (mine) setMyCharacter(mine)
+        if (campaignRes.data) {
+          console.log('Campaign loaded:', campaignRes.data.name)
+          setCampaign(campaignRes.data)
+        }
+
+        if (charactersRes.data) {
+          console.log('Characters loaded:', charactersRes.data.length)
+          setCharacters(charactersRes.data)
+          const mine = charactersRes.data.find(c => c.user_id === user.id)
+          if (mine) {
+            console.log('User character found:', mine.name)
+            setMyCharacter(mine)
+          } else {
+            console.warn('No character found for current user in this campaign')
+          }
+        }
+
+        if (messagesRes.data) {
+          console.log('Messages loaded:', messagesRes.data.length)
+          setMessages(messagesRes.data)
+        }
+      } catch (err) {
+        console.error('Failed to load initial game data:', err)
       }
-
-      if (messagesRes.data) setMessages(messagesRes.data)
     }
 
     loadData()

@@ -5,7 +5,7 @@ import type { Message } from '@/types/message'
 
 function MessageBubble({ message }: { message: Message }) {
   if (message.type === 'narration') {
-    const cleanContent = message.content
+    const cleanContent = (message.content || '')
       .replace(/<[^>]+\/>/g, '')
       .replace(/<[^>]+>/g, '')
       .replace(/\s{2,}/g, ' ')
@@ -28,7 +28,7 @@ function MessageBubble({ message }: { message: Message }) {
       <div className="flex justify-end mb-6 animate-fadeIn">
         <div className="bg-black/40 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10 shadow-lg">
           <p className="text-sm text-amber-highlight/90 font-medium italic">
-            "{message.content}"
+            &quot;{message.content}&quot;
           </p>
         </div>
       </div>
