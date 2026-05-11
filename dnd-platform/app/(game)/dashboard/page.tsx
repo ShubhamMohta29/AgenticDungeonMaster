@@ -17,27 +17,36 @@ export default function DashboardPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const [joinCode, setJoinCode] = useState('')
+  const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          router.push('/login')
+          return
+        }
+        setUserId(user.id)
 
-      const { data: members } = await supabase
-        .from('campaign_members')
-        .select('campaign_id')
-        .eq('user_id', user.id)
-
-      if (members && members.length > 0) {
-        const ids = members.map(m => m.campaign_id)
-        const { data } = await supabase
+        // Fetch campaigns where the user is a member
+        const { data, error } = await supabase
           .from('campaigns')
-          .select('*')
-          .in('id', ids)
-        setCampaigns(data || [])
+          .select('*, campaign_members!inner(user_id)')
+          .eq('campaign_members.user_id', user.id)
+
+        if (error) {
+          console.error('Error fetching campaigns:', error)
+          setCampaigns([])
+        } else {
+          setCampaigns(data || [])
+        }
+      } catch (err) {
+        console.error('Unexpected error in dashboard load:', err)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     load()
   }, [router])
@@ -50,7 +59,7 @@ export default function DashboardPage() {
       .from('campaigns')
       .select('id')
       .eq('invite_code', code)
-      .single()
+      .maybeSingle()
 
     if (!campaign) { alert('Campaign not found'); return }
 
@@ -101,6 +110,10 @@ export default function DashboardPage() {
             </h1>
             <p className="text-sm text-white/70 mt-1">
               Pick up where you left off or start a new adventure
+            </p>
+            {/* Debug info - can be removed later */}
+            <p className="text-[10px] text-white/20 mt-2 font-mono">
+              User ID: {loading ? '...' : userId || 'Not logged in'}
             </p>
           </div>
           <button

@@ -38,28 +38,53 @@ export default function DMConsolePage() {
         }
 
         const [campaignRes, charactersRes, messagesRes] = await Promise.all([
-          supabase.from('campaigns').select('*').eq('id', campaignId).single(),
+          supabase.from('campaigns').select('*').eq('id', campaignId).maybeSingle(),
           supabase.from('characters').select('*').eq('campaign_id', campaignId),
           supabase.from('messages').select('*').eq('campaign_id', campaignId)
             .order('created_at', { ascending: true }).limit(50)
         ])
 
-        if (campaignRes.error) console.error('DM Console: Campaign load error:', campaignRes.error)
-        if (charactersRes.error) console.error('DM Console: Characters load error:', charactersRes.error)
-        if (messagesRes.error) console.error('DM Console: Messages load error:', messagesRes.error)
+        if (campaignRes.error) {
+          console.error('DM Console: Campaign load error:', {
+            message: campaignRes.error.message,
+            details: campaignRes.error.details,
+            hint: campaignRes.error.hint,
+            code: campaignRes.error.code,
+          })
+        }
+        if (charactersRes.error) {
+          console.error('DM Console: Characters load error:', {
+            message: charactersRes.error.message,
+            details: charactersRes.error.details,
+            hint: charactersRes.error.hint,
+            code: charactersRes.error.code,
+          })
+        }
+        if (messagesRes.error) {
+          console.error('DM Console: Messages load error:', {
+            message: messagesRes.error.message,
+            details: messagesRes.error.details,
+            hint: messagesRes.error.hint,
+            code: messagesRes.error.code,
+          })
+        }
 
-        if (campaignRes.data) {
-          console.log('DM Console: Campaign loaded:', campaignRes.data.name)
-          setCampaign(campaignRes.data)
-          setCampaignLocal(campaignRes.data)
+        if (!campaignRes.data) {
+          console.error('DM Console: Campaign not found')
+          setAuthChecked(true)
+          return
+        }
 
-          // Redirect if not human DM campaign
-          if (campaignRes.data.dm_mode !== 'human' || campaignRes.data.dm_user_id !== user.id) {
-            console.warn('DM Console: User is not the DM or mode is not human. Redirecting to play page.')
-            router.push(`/campaign/${campaignId}/play`)
-            setAuthChecked(true)
-            return
-          }
+        console.log('DM Console: Campaign loaded:', campaignRes.data.name)
+        setCampaign(campaignRes.data)
+        setCampaignLocal(campaignRes.data)
+
+        // Redirect if not human DM campaign
+        if (campaignRes.data.dm_mode !== 'human' || campaignRes.data.dm_user_id !== user.id) {
+          console.warn('DM Console: User is not the DM or mode is not human. Redirecting to play page.')
+          router.push(`/campaign/${campaignId}/play`)
+          setAuthChecked(true)
+          return
         }
 
         if (charactersRes.data) {

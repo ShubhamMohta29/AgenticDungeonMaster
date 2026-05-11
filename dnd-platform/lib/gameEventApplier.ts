@@ -18,6 +18,24 @@ function getProficiencyBonus(level: number): number {
   return Math.floor((level - 1) / 4) + 2
 }
 
+function getHitDieForClass(className: string): number {
+  const dice: Record<string, number> = {
+    'barbarian': 12,
+    'fighter': 10, 'paladin': 10, 'ranger': 10,
+    'bard': 8, 'cleric': 8, 'druid': 8, 'monk': 8, 'rogue': 8, 'warlock': 8,
+    'sorcerer': 6, 'wizard': 6
+  }
+  return dice[className.toLowerCase()] || 8
+}
+
+function calculateHpIncrease(c: any, levelsGained: number): number {
+  const conScore = c.ability_scores?.con || 10
+  const conMod = Math.floor((conScore - 10) / 2)
+  const hitDie = getHitDieForClass(c.class || '')
+  const avgRoll = Math.floor(hitDie / 2) + 1
+  return levelsGained * Math.max(1, avgRoll + conMod)
+}
+
 export async function applyEvents(
   events: any[],
   campaignId: string,
@@ -31,12 +49,20 @@ export async function applyEvents(
   for (const target of characterMap.values()) {
     const correctLevel = getLevelFromXP(target.xp || 0)
     if (correctLevel > target.level) {
+      const levelsGained = correctLevel - target.level
       console.log(`Syncing level for ${target.name}: ${target.level} -> ${correctLevel}`)
+      
+      const hpIncrease = calculateHpIncrease(target, levelsGained)
       target.level = correctLevel
       target.proficiency_bonus = getProficiencyBonus(correctLevel)
+      target.max_hp = (target.max_hp || 10) + hpIncrease
+      target.hp = (target.hp || 0) + hpIncrease // Add to current too
+
       await supabaseAdmin.from('characters').update({ 
         level: target.level,
-        proficiency_bonus: target.proficiency_bonus 
+        proficiency_bonus: target.proficiency_bonus,
+        max_hp: target.max_hp,
+        hp: target.hp
       }).eq('id', target.id)
     }
   }
@@ -71,17 +97,21 @@ export async function applyEvents(
           
           const newLevel = getLevelFromXP(c.xp)
           if (newLevel > c.level) {
-            const oldLevel = c.level
+            const levelsGained = newLevel - c.level
+            console.log(`Character ${c.name} leveled up from ${c.level} to ${newLevel}!`)
+            
+            const hpIncrease = calculateHpIncrease(c, levelsGained)
             c.level = newLevel
             c.proficiency_bonus = getProficiencyBonus(newLevel)
-            
-            // Log leveling up
-            console.log(`Character ${c.name} leveled up from ${oldLevel} to ${newLevel}!`)
-            
+            c.max_hp = (c.max_hp || 10) + hpIncrease
+            c.hp = (c.hp || 0) + hpIncrease
+
             await supabaseAdmin.from('characters').update({ 
               xp: c.xp, 
               level: c.level,
-              proficiency_bonus: c.proficiency_bonus 
+              proficiency_bonus: c.proficiency_bonus,
+              max_hp: c.max_hp,
+              hp: c.hp
             }).eq('id', c.id)
           } else {
             await supabaseAdmin.from('characters').update({ xp: c.xp }).eq('id', c.id)

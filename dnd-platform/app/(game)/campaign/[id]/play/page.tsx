@@ -17,6 +17,7 @@ export default function PlayPage() {
   const params = useParams()
   const campaignId = params.id as string
 
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryIn, setRetryIn] = useState<number | null>(null)
 
@@ -32,6 +33,11 @@ export default function PlayPage() {
     async function loadData() {
       try {
         console.log('Fetching campaign data for:', campaignId)
+
+        // Debug: verify auth session for RLS compatibility
+        const { data: { session } } = await supabase.auth.getSession()
+        console.log('Session:', session)
+
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
           console.warn('No authenticated user found in PlayPage')
@@ -39,20 +45,44 @@ export default function PlayPage() {
         }
 
         const [campaignRes, charactersRes, messagesRes] = await Promise.all([
-          supabase.from('campaigns').select('*').eq('id', campaignId).single(),
+          supabase.from('campaigns').select('*').eq('id', campaignId).maybeSingle(),
           supabase.from('characters').select('*').eq('campaign_id', campaignId),
           supabase.from('messages').select('*').eq('campaign_id', campaignId)
             .order('created_at', { ascending: false }).limit(50)
         ])
 
-        if (campaignRes.error) console.error('Campaign load error:', campaignRes.error)
-        if (charactersRes.error) console.error('Characters load error:', charactersRes.error)
-        if (messagesRes.error) console.error('Messages load error:', messagesRes.error)
-
-        if (campaignRes.data) {
-          console.log('Campaign loaded:', campaignRes.data.name)
-          setCampaign(campaignRes.data)
+        if (campaignRes.error) {
+          console.error('Campaign load error:', {
+            message: campaignRes.error.message,
+            details: campaignRes.error.details,
+            hint: campaignRes.error.hint,
+            code: campaignRes.error.code,
+          })
         }
+        if (charactersRes.error) {
+          console.error('Characters load error:', {
+            message: charactersRes.error.message,
+            details: charactersRes.error.details,
+            hint: charactersRes.error.hint,
+            code: charactersRes.error.code,
+          })
+        }
+        if (messagesRes.error) {
+          console.error('Messages load error:', {
+            message: messagesRes.error.message,
+            details: messagesRes.error.details,
+            hint: messagesRes.error.hint,
+            code: messagesRes.error.code,
+          })
+        }
+
+        if (!campaignRes.data) {
+          console.error('Campaign not found')
+          return
+        }
+
+        console.log('Campaign loaded:', campaignRes.data.name)
+        setCampaign(campaignRes.data)
 
         if (charactersRes.data) {
           console.log('Characters loaded:', charactersRes.data.length)
@@ -73,6 +103,8 @@ export default function PlayPage() {
         }
       } catch (err) {
         console.error('Failed to load initial game data:', err)
+      } finally {
+        setLoading(false)
       }
     }
 
@@ -186,6 +218,16 @@ export default function PlayPage() {
     }
   }, [campaignId, setDMThinking])
 
+  if (loading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-amber-main/30 border-t-amber-highlight rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-foreground/60 text-sm">Loading campaign...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative h-screen w-full overflow-hidden flex">
