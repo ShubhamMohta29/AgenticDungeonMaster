@@ -1,165 +1,55 @@
 import { supabaseAdmin } from './supabaseServer'
 
-const XP_THRESHOLDS = [
-  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
-  85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000
-]
-
-function getLevelFromXP(xp: number): number {
-  let level = 1
-  for (let i = 1; i < XP_THRESHOLDS.length; i++) {
-    if (xp >= XP_THRESHOLDS[i]) level = i + 1
-    else break
-  }
-  return Math.min(level, 20)
+cotype EventCharacter = {
+  id: string
+  name: string
+  hp: number
+  max_hp: number
+  temp_hp: number
+  xp: number
 }
 
-function getProficiencyBonus(level: number): number {
-  return Math.floor((level - 1) / 4) + 2
+type GameEventRecord = {
+  type: string
+  data: Record<string, string>
 }
 
 export async function applyEvents(
-  events: any[],
+  events: GameEventRecord[],
   campaignId: string,
-  initialCharacters: any[]
+  characters: EventCharacter[]
 ) {
-  // Local cache to track changes across multiple events in the same batch
-  const characterMap = new Map<string, any>()
-  initialCharacters.forEach(c => characterMap.set(c.id, JSON.parse(JSON.stringify(c))))
-
-  // Proactively check for level-ups on all characters in this batch
-  for (const target of characterMap.values()) {
-    const correctLevel = getLevelFromXP(target.xp || 0)
-    if (correctLevel > target.level) {
-      console.log(`Syncing level for ${target.name}: ${target.level} -> ${correctLevel}`)
-      target.level = correctLevel
-      target.proficiency_bonus = getProficiencyBonus(correctLevel)
-      await supabaseAdmin.from('characters').update({ 
-        level: target.level,
-        proficiency_bonus: target.proficiency_bonus 
-      }).eq('id', target.id)
-    }
-  }
-
   for (const event of events) {
     try {
-      const targetName = event.data?.target?.toLowerCase()
-      const target = Array.from(characterMap.values()).find(
-        c => c.name.toLowerCase() === targetName
-      )
-
-      if (event.type === 'damage' && target) {
+      if (event.type === 'damage') {
+        const target = characters.find(
+          c => c.name.toLowerCase() === event.data.target?.toLowerCase()
+        )
+        if (target) {
+          const damage = parseInt(event.data.amount || '0', 10)
+          const remaining = damage - target.temp_hp
+          const newHp = remaining > 0 ? Math.max(0, target.hp - remaining) : target.hp
+          const newTempHp = remaining > 0 ? 0 : target.temp_hp - damage
+          await supabaseAdmin
+            .from('characters')
+            .update({ hp: newHp, temp_hp: newTempHp })
+            .eq('id', target.id)
+        }
+      } else if (event.type === 'heal') {
+        const target = characters.find(
+          c => c.name.toLowerCase() === event.data.target?.toLowerCase()
+        )
+        if (target) {
+          const newHp = Math.min(target.max_hp, target.hp + parseInt(event.data.amount || '0', 10))
+          await supabaseAdmin.from('characters').update({ hp: newHp }).eq('id', target.id)
+        }
+      } else if (event.type === 'xp') {
         const amount = parseInt(event.data.amount || '0', 10)
-        const remaining = amount - (target.temp_hp || 0)
-        target.hp = remaining > 0 ? Math.max(0, (target.hp || 0) - remaining) : target.hp
-        target.temp_hp = remaining > 0 ? 0 : (target.temp_hp || 0) - amount
-        await supabaseAdmin
-          .from('characters')
-          .update({ hp: target.hp, temp_hp: target.temp_hp })
-          .eq('id', target.id)
-      } 
-      else if (event.type === 'heal' && target) {
-        const amount = parseInt(event.data.amount || '0', 10)
-        target.hp = Math.min(target.max_hp || 10, (target.hp || 0) + amount)
-        await supabaseAdmin.from('characters').update({ hp: target.hp }).eq('id', target.id)
-      }
-      else if (event.type === 'xp') {
-        const amount = parseInt(event.data.amount || '0', 10)
-        for (const c of characterMap.values()) {
-          const oldXp = c.xp || 0
-          c.xp = oldXp + amount
-          
-          const newLevel = getLevelFromXP(c.xp)
-          if (newLevel > c.level) {
-            const oldLevel = c.level
-            c.level = newLevel
-            c.proficiency_bonus = getProficiencyBonus(newLevel)
-            
-            // Log leveling up
-            console.log(`Character ${c.name} leveled up from ${oldLevel} to ${newLevel}!`)
-            
-            await supabaseAdmin.from('characters').update({ 
-              xp: c.xp, 
-              level: c.level,
-              proficiency_bonus: c.proficiency_bonus 
-            }).eq('id', c.id)
-          } else {
-            await supabaseAdmin.from('characters').update({ xp: c.xp }).eq('id', c.id)
-          }
-        }
-      }
-      else if (event.type === 'condition_add' && target) {
-        const condition = event.data.condition
-        if (condition && !target.conditions.includes(condition)) {
-          target.conditions = [...(target.conditions || []), condition]
-          await supabaseAdmin.from('characters').update({ conditions: target.conditions }).eq('id', target.id)
-        }
-      }
-      else if (event.type === 'condition_remove' && target) {
-        const condition = event.data.condition
-        target.conditions = (target.conditions || []).filter((c: string) => c !== condition)
-        await supabaseAdmin.from('characters').update({ conditions: target.conditions }).eq('id', target.id)
-      }
-      else if (event.type === 'inventory_add' && target) {
-        const item = event.data.item
-        const qty = parseInt(event.data.quantity || '1', 10)
-        const inventory = target.inventory || []
-        const existing = inventory.find((i: any) => i.name === item)
-        if (existing) {
-          existing.quantity += qty
-        } else {
-          inventory.push({ name: item, quantity: qty, equipped: false, attuned: false, weight: 0, value: 0 })
-        }
-        target.inventory = inventory
-        await supabaseAdmin.from('characters').update({ inventory: target.inventory }).eq('id', target.id)
-      }
-      else if (event.type === 'feature_add' && target) {
-        const name = event.data.name
-        const desc = event.data.description
-        const features = target.features || []
-        if (name && !features.find((f: any) => f.name === name)) {
-          features.push({ name, description: desc })
-          target.features = features
-          await supabaseAdmin.from('characters').update({ features: target.features }).eq('id', target.id)
-        }
-      }
-      else if (event.type === 'skill_update' && target) {
-        const skill = event.data.skill?.toLowerCase().replace(/ /g, '_')
-        const val = event.data.value === 'true'
-        if (skill) {
-          target.skills = { ...(target.skills || {}), [skill]: val }
-          await supabaseAdmin.from('characters').update({ skills: target.skills }).eq('id', target.id)
-        }
-      }
-      else if (event.type === 'ability_update' && target) {
-        const ability = event.data.ability?.toLowerCase()
-        const val = parseInt(event.data.value || '10', 10)
-        if (ability && target.ability_scores && target.ability_scores[ability] !== undefined) {
-          target.ability_scores[ability] = val
-          await supabaseAdmin.from('characters').update({ ability_scores: target.ability_scores }).eq('id', target.id)
-        }
-      }
-      else if (event.type === 'rest' && target) {
-        const isLong = event.data.rest_type === 'long'
-        target.hp = target.max_hp
-        if (isLong) {
-          target.temp_hp = 0
-          if (target.spells && target.spells.slot_max) {
-             target.spells.slots = JSON.parse(JSON.stringify(target.spells.slot_max))
-          }
-        }
-        await supabaseAdmin.from('characters').update({ 
-          hp: target.hp, 
-          temp_hp: target.temp_hp,
-          spells: target.spells
-        }).eq('id', target.id)
-      }
-      else if (event.type === 'new_npc') {
-        await supabaseAdmin.from('npcs').insert({
-          campaign_id: campaignId,
-          name: event.data.name,
-          description: event.data.description,
-          disposition: event.data.disposition || 'unknown'
+        await Promise.all(characters.map(c =>
+          supabaseAdmin.from('characters').update({ xp: c.xp + amount }).eq('id', c.id)
+        ))
+      } else if (event.type === 'new_npc') {
+ event.data.disposition || 'unknown'
         })
       } else if (event.type === 'new_quest') {
         await supabaseAdmin.from('quests').insert({
