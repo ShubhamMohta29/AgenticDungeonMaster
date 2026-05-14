@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useGameStore } from '@/store/gameStore'
@@ -17,6 +17,9 @@ export default function PlayPage() {
   const params = useParams()
   const campaignId = params.id as string
 
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
   const {
     setCampaign, setCharacters, setMyCharacter,
     addMessage, setEncounter,
@@ -27,25 +30,81 @@ export default function PlayPage() {
   // Load initial data
   useEffect(() => {
     async function loadData() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        console.log('Fetching campaign data for:', campaignId)
 
-      const [campaignRes, charactersRes, messagesRes] = await Promise.all([
-        supabase.from('campaigns').select('*').eq('id', campaignId).single(),
-        supabase.from('characters').select('*').eq('campaign_id', campaignId),
-        supabase.from('messages').select('*').eq('campaign_id', campaignId)
-          .order('created_at', { ascending: true }).limit(50)
-      ])
+        const { data: { session } } = await supabase.auth.getSession()
+        console.log('Session:', session)
 
-      if (campaignRes.data) setCampaign(campaignRes.data)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          console.warn('No authenticated user found in PlayPage')
+          return
+        }
 
-      if (charactersRes.data) {
-        setCharacters(charactersRes.data)
-        const mine = charactersRes.data.find(c => c.user_id === user.id)
-        if (mine) setMyCharacter(mine)
+        const [campaignRes, charactersRes, messagesRes] = await Promise.all([
+          supabase.from('campaigns').select('*').eq('id', campaignId).maybeSingle(),
+          supabase.from('characters').select('*').eq('campaign_id', campaignId),
+          supabase.from('messages').select('*').eq('campaign_id', campaignId)
+            .order('created_at', { ascending: false }).limit(50)
+        ])
+
+        if (campaignRes.error) {
+          console.error('Campaign load error:', {
+            message: campaignRes.error.message,
+            details: campaignRes.error.details,
+            hint: campaignRes.error.hint,
+            code: campaignRes.error.code,
+          })
+        }
+        if (charactersRes.error) {
+          console.error('Characters load error:', {
+            message: charactersRes.error.message,
+            details: charactersRes.error.details,
+            hint: charactersRes.error.hint,
+            code: charactersRes.error.code,
+          })
+        }
+        if (messagesRes.error) {
+          console.error('Messages load error:', {
+            message: messagesRes.error.message,
+            details: messagesRes.error.details,
+            hint: messagesRes.error.hint,
+            code: messagesRes.error.code,
+          })
+        }
+
+        if (!campaignRes.data) {
+          console.error('Campaign not found')
+          setError('Campaign not found')
+          return
+        }
+
+        console.log('Campaign loaded:', campaignRes.data.name)
+        setCampaign(campaignRes.data)
+
+        if (charactersRes.data) {
+          console.log('Characters loaded:', charactersRes.data.length)
+          setCharacters(charactersRes.data)
+          const mine = charactersRes.data.find(c => c.user_id === user.id)
+          if (mine) {
+            console.log('User character found:', mine.name)
+            setMyCharacter(mine)
+          } else {
+            console.warn('No character found for current user in this campaign')
+          }
+        }
+
+        if (messagesRes.data) {
+          console.log('Messages loaded:', messagesRes.data.length)
+          setMessages([...messagesRes.data].reverse())
+        }
+      } catch (err) {
+        console.error('Failed to load initial game data:', err)
+        setError('Failed to load campaign data')
+      } finally {
+        setLoading(false)
       }
-
-      if (messagesRes.data) setMessages(messagesRes.data)
     }
 
     loadData()
@@ -148,6 +207,25 @@ export default function PlayPage() {
   async function handleRollComplete(result: number, success: boolean) {
     await handleAction(
       `I rolled a ${result} — ${success ? 'success' : 'failure'}.`
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-amber-main/30 border-t-amber-highlight rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-foreground/60 text-sm">Loading campaign...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center">
+        <p className="text-red-400 text-sm">{error}</p>
+      </div>
     )
   }
 
