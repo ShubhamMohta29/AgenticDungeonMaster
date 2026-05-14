@@ -476,11 +476,15 @@ Goal: Production-ready — performance, security, mobile, all edge cases handled
   ─── LOW PRIORITY / FUTURE SCOPE ─────────────────────────────────────────────
 
   7.17  Content age-gating (PRD OQ-2)
-    [TODO]  Age verification prompt on account creation
-    [TODO]  System prompt modifier based on age gate:
-              Under 16: DM is very moderate
-              16–17: violence allowed, adult content off
-              18+: full content
+    [DONE]  Date of birth field on register page — stored in auth metadata
+    [DONE]  011_age_gate.sql migration — date_of_birth column on users,
+             handle_new_user trigger reads DOB from auth metadata
+    [DONE]  lib/contentRating.ts — getContentRating(dob) → under16 | teen | adult
+    [DONE]  System prompt modifier based on age gate (lib/systemPrompt.ts):
+              Under 16: no violence details, no sexual content, no profanity
+              16–17: vivid violence allowed, no sexual content
+              18+: no restriction
+    [DONE]  DM route fetches user DOB, passes contentRating to prompt builder
 
   7.18  Portrait / avatar upload
     [TODO]  Supabase Storage bucket setup

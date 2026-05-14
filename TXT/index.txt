@@ -27,7 +27,7 @@
   OVERALL BUILD PROGRESS
 ────────────────────────────────────────────────────────────────────────────────
 
-  Authentication & User Management        [####################] 100%
+  Authentication & User Management        [####################] 100%  (+ age-gating)
   Campaign Management                     [####################] 100%
   AI Dungeon Master (Narration Engine)    [####################] 100%
   Dice Rolling System (auto, server-side)  [####################] 100%
@@ -53,6 +53,17 @@
   [DONE]    User Auth (Login / Register)
             Supabase Auth. Session managed via middleware.
             RLS scoped to auth.uid() on every table.
+            Date of birth collected at registration → stored in users.date_of_birth
+            via handle_new_user trigger reading auth signup metadata.
+
+  [DONE]    Content Age-Gating (PRD OQ-2)
+            lib/contentRating.ts: getContentRating(dob) → under16 | teen | adult.
+            DM system prompt (lib/systemPrompt.ts) injects content rules based on rating:
+              under 16 — no gore, no sexual content, no profanity (child-safe)
+              16–17    — vivid violence allowed, no sexual content
+              18+      — no restriction
+            /api/dm fetches users.date_of_birth, computes rating, passes to prompt builder.
+            Existing users without DOB default to 'adult' rating.
 
   [DONE]    Dashboard
             Lists all campaigns user is a member of.
@@ -263,12 +274,13 @@
   │   │   ├── aiTypes.ts               # AI request / response types
   │   │   ├── groq.ts                  # Groq API (Llama 3.3 70B + 3.1 8B)
   │   │   ├── claude.ts                # Claude Haiku API (copilot)
+  │   │   ├── contentRating.ts         # getContentRating(dob) → under16|teen|adult
   │   │   ├── gameEvents.ts            # XML game-event parser
   │   │   ├── gameEventApplier.ts      # Apply events to Supabase DB
   │   │   ├── combatEngine.ts          # D&D 5e combat resolution
   │   │   ├── rateLimiter.ts           # In-memory rate limiter (1 DM call/3s)
   │   │   ├── dice.ts                  # Dice utilities
-  │   │   ├── systemPrompt.ts          # DM prompt builder
+  │   │   ├── systemPrompt.ts          # DM prompt builder (content-rating aware)
   │   │   ├── worldMemory.ts           # Session summarisation
   │   │   ├── monsterAI.ts             # Monster tactical decisions
   │   │   ├── supabase.ts              # Client-side Supabase
@@ -293,7 +305,7 @@
   │   │   ├── message.ts
   │   │   ├── npc.ts
   │   │   └── quest.ts
-  │   ├── supabase/migrations/         # 10 SQL migration files
+  │   ├── supabase/migrations/         # 11 SQL migration files
   │   ├── package.json
   │   ├── tsconfig.json
   │   ├── CLAUDE.md
@@ -316,8 +328,9 @@
 ────────────────────────────────────────────────────────────────────────────────
 
   TABLE: users
-    id, email, created_at
+    id, display_name, avatar_url, preferences, date_of_birth, created_at
     Mirrors Supabase Auth users table.
+    date_of_birth added in migration 011 — drives content rating for DM prompts.
 
   TABLE: campaigns
     id, name, setting, dm_mode (ai|human), dm_user_id
