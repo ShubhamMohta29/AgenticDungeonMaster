@@ -3,7 +3,7 @@
   RealmForge — AI-Powered D&D 5e Online Platform
   Version: 1.0
   Date: 2026-05-13
-  Status: Phases 0–6 substantially complete. Phase 7 in progress.
+  Status: Phases 0–6 complete. Phase 7 in progress (critical bug + spell system remain).
 ================================================================================
 
   HOW TO READ THIS DOCUMENT
@@ -133,14 +133,17 @@ Goal: Pure TypeScript rules logic — no AI calls, fully deterministic.
     [DONE]  applyCondition / removeCondition
     [DONE]  checkDeath, resolveDeathSave
 
-  2.7  Spells data (lib/dnd5e/spells.ts or equivalent)
-    [TODO]  Verify: does a spells.ts with full SRD data exist?
-             If not: import all SRD spells from 5e-database JSON dataset.
-             Each spell needs: name, level, school, casting_time, range,
-             components, duration, description, classes[].
+  2.7  Spells data (lib/dnd5e/spells.ts)
+    [DONE]  lib/dnd5e/spells.ts exists with:
+             getStartingSpells(cls) — level-1 starting spells per class
+             SPELL_DESCRIPTIONS — ~80 SRD spells with one-line descriptions
+             getSpellDescription(name) — lookup helper
+    [DONE]  spell_learn game event — DM can add spells mid-adventure via XML tag
+             (gameEvents.ts + gameEventApplier.ts)
+    [DONE]  Character creation auto-populates spells.known from getStartingSpells
     [TODO]  canCastSpell(character, spell)
     [TODO]  expendSpellSlot(character, level)
-    [TODO]  shortRest / longRest
+    [TODO]  shortRest / longRest slot recovery
 
   2.8  Monsters data (lib/dnd5e/monsters.ts)
     [DONE]  Monster stat blocks imported
@@ -194,7 +197,7 @@ Goal: Single-player AI DM session works locally end-to-end.
     [DONE]  Context fetch, system prompt build, Groq call
     [DONE]  Event parse → DB apply → message store → Realtime broadcast
     [DONE]  Returns { narration, events, updatedCharacter }
-    [TODO]  Rate limiting (1 request per 3 seconds per campaign)
+    [DONE]  Rate limiting (1 request per 3 seconds per campaign)
 
   DONE CRITERIA: Submit a player action → AI responds with narration →
   game events (XP, HP) are applied to the DB → all clients see the update.
@@ -262,7 +265,7 @@ Goal: Full player UI with real-time multiplayer. Two-player session works.
     [DONE]  Create campaign flow → invite code displayed
     [DONE]  Join campaign with invite code
     [TODO]  Campaign lobby page (/campaign/[id]/lobby) — party assembly before play
-    [TODO]  Archive/delete campaigns from dashboard UI
+    [DONE]  Archive campaigns from dashboard UI (active/archived sections, read-only view)
 
   5.3  Main game table (/campaign/[id]/play)
     [DONE]  Three-column layout (dice log | story log | character panel)
@@ -271,7 +274,7 @@ Goal: Full player UI with real-time multiplayer. Two-player session works.
     [DONE]  "DM is thinking..." animated indicator during AI response
     [DONE]  Auto-scroll to bottom on new message
     [TODO]  Quick action buttons (Look around, Attack, Cast Spell, etc.)
-    [TODO]  "Jump to latest" button when scrolled up
+    [DONE]  "Jump to latest" button when scrolled up
     [TODO]  Presence indicators (who is online in the session)
 
   5.4  Character panel (components/character/CharacterPanel.tsx)
@@ -283,14 +286,14 @@ Goal: Full player UI with real-time multiplayer. Two-player session works.
     [DONE]  All 6 ability scores with modifiers
     [DONE]  Active conditions (badge display)
     [DONE]  "View full character sheet →" button
-    [TODO]  Spell slot dots for spellcasters
+    [DONE]  Spell slot / mana bar for spellcasters (ManaBar component)
 
   5.5  Character sheet modal (components/character/CharacterSheet.tsx)
     [DONE]  Modal structure, tabs navigation
     [DONE]  Overview tab: ability scores, saving throws, skills
-    [PARTIAL] Spells tab: structure exists, may need spell data integration
-    [PARTIAL] Inventory tab: structure exists
-    [TODO]  Features tab (class/race features with descriptions)
+    [DONE]  Spells tab: slot grid, spell attack/DC, prepared spell dots
+    [DONE]  Inventory tab: rarity-coloured items, weight total
+    [DONE]  Features tab (class/race features with descriptions)
     [TODO]  Notes tab (inline editing)
     [TODO]  Real-time updates to sheet while modal is open
 
@@ -303,9 +306,10 @@ Goal: Full player UI with real-time multiplayer. Two-player session works.
     [TODO]  "End Turn" button enabled only on current player's turn
 
   5.7  Dice log (components/game/DiceLog.tsx)
-    [DONE]  Shows last N rolls with die type, result, modifier, total
+    [DONE]  Shows last N rolls with die type, result, modifier, DC, success/failure
+    [DONE]  Roll requests from DM resolve automatically server-side — no modal needed.
+             DiceRollModal.tsx deleted. Results appear instantly in DiceLog.
     [TODO]  Manual dice tray buttons (d4, d6, d8, d10, d12, d20, d100)
-    [TODO]  Roll request modal (when Claude requests a specific roll)
 
   5.8  Real-time sync
     [DONE]  Supabase Realtime subscriptions on messages, characters,
@@ -368,10 +372,10 @@ Goal: Production-ready — performance, security, mobile, all edge cases handled
   ─── CRITICAL (blocks a good player experience) ──────────────────────────────
 
   7.1  Campaign lifecycle
-    [TODO]  Archive campaign flow — two-step confirmation, read-only archived view
-    [TODO]  Campaign End modal — AI generates summary → confirm → archive
-    [TODO]  Archived campaigns accessible read-only from dashboard
-    [TODO]  "End campaign" intent detection in player actions
+    [DONE]  Archive campaign flow — two-step confirmation, read-only archived view
+    [DONE]  Campaign End modal — AI generates epilogue (Groq 70B) → confirm → archive
+    [DONE]  Archived campaigns accessible read-only from dashboard
+    [DONE]  "End campaign" intent detection in player actions (END_CAMPAIGN_RE regex)
 
   7.2  Landing page (/)
     [DONE]  app/page.tsx exists
@@ -393,45 +397,45 @@ Goal: Production-ready — performance, security, mobile, all edge cases handled
   ─── HIGH PRIORITY ───────────────────────────────────────────────────────────
 
   7.5  Mana bar (FUTURE-8 — marked high priority in PRD)
-    [TODO]  Mana bar below HP bar in character panel
-    [TODO]  Shows current / total mana in bar format
-    [TODO]  Spellcaster classes have mana; martial classes (Fighter, Barbarian,
-             Monk) show no mana bar at all
-    [TODO]  Mana values differ by class — spellcasters have more
-    [TODO]  Mana updated by game events (spell casts cost mana)
+    [DONE]  Mana bar below HP bar in character panel
+    [DONE]  Shows current / total spell slots as blue gradient bar
+    [DONE]  Martial classes (Fighter, Barbarian, Monk, Rogue) show no bar
+    [PARTIAL] Spell slot values per class (uses character.spells.slots JSONB)
+    [TODO]  Mana updated by game events (expendSpellSlot not yet wired to events)
 
   7.6  Rate limiting
-    [TODO]  1 AI DM call per 3 seconds per campaign (/api/dm)
+    [DONE]  1 AI DM call per 3 seconds per campaign (/api/dm) — lib/rateLimiter.ts
     [TODO]  10 dice rolls per minute per user (/api/dice)
     [TODO]  Input sanitization — strip HTML from player input before sending to AI
 
   7.7  Error handling & resilience
     [TODO]  Error boundaries on all major game components (no full-screen crash)
-    [TODO]  Groq API error → "The DM pauses momentarily..." toast + retry button
+    [DONE]  Groq API error → inline banner in ActionPanel with retry + dismiss
     [TODO]  Connection status indicator (Realtime health)
     [TODO]  Reconnect handler — fetch missed messages on Realtime reconnect
     [TODO]  Debounce player input (prevent double-send on fast clicks)
 
   7.8  Empty states (all pages)
-    [TODO]  Dashboard empty state (no campaigns yet) with Create / Join CTAs
+    [DONE]  Dashboard empty state (no campaigns yet) with Create / Join CTAs
     [TODO]  Story log empty state ("Your adventure is beginning...")
     [TODO]  Party overview empty state ("Waiting for players...")
     [TODO]  Dice log empty state ("Your rolls will appear here.")
     [TODO]  Inventory empty state, Spells tab for non-spellcasters
 
   7.9  Toast notification system
-    [TODO]  Level up toast
-    [TODO]  XP gained toast
-    [TODO]  Item received toast
-    [TODO]  New quest toast
+    [DONE]  Level up toast (triggers on character.level increase via Realtime)
+    [DONE]  XP gained toast (triggers on character.xp increase via Realtime)
+    [DONE]  Item received toast (triggers on narration metadata loot event)
+    [DONE]  New quest toast (triggers on narration metadata new_quest event)
     [TODO]  Connection lost / restored banner
 
   7.10  Spell system (FUTURE-1 — medium priority, but PRD OQ-5 says aim for comprehensiveness)
-    [TODO]  Full SRD spell list imported from 5e-database JSON
+    [DONE]  Starting spells auto-populated at character creation (getStartingSpells)
+    [DONE]  ~80 spell descriptions in SPELL_DESCRIPTIONS, shown in character sheet
+    [DONE]  spell_learn game event — DM can grant spells mid-adventure
+    [DONE]  Spells tab in character sheet — slot grid, spell descriptions, prepared dots
     [TODO]  canCastSpell, expendSpellSlot, shortRest, longRest
     [TODO]  Spell quick-cast buttons in ActionPanel for spellcasters
-    [TODO]  Spell slot dots in character panel
-    [TODO]  Full Spells tab in character sheet
 
   ─── MEDIUM PRIORITY ─────────────────────────────────────────────────────────
 
@@ -526,16 +530,30 @@ CURRENT SPRINT — IMMEDIATE NEXT ACTIONS
 
   Tackle in this order:
 
-  1. [CRITICAL] Campaign end / archive flow (OQ-3 is answered in PRD)
-  2. [HIGH]     Mana bar (explicitly marked high priority in FUTURE-8)
-  3. [HIGH]     Rate limiting on /api/dm
-  4. [HIGH]     Error boundaries + Groq error recovery UX
-  5. [HIGH]     Dashboard empty state + "Jump to latest" in story log
-  6. [MEDIUM]   Spell system — import SRD data, canCastSpell, spells tab UI
-  7. [MEDIUM]   Missing TypeScript type files (campaign, combat, npc, quest)
-  8. [MEDIUM]   Level-Up wizard UI (logic already exists in leveling.ts)
-  9. [LOW]      Session log page
-  10. [LOW]     DM advanced tool panels (NPC manager, quest tracker, etc.)
+  1. [DONE]     Fix play page redirect bug — retry loop in loadData
+                File: app/(game)/campaign/[id]/play/page.tsx
+                Root cause: Supabase RLS timing after character creation.
+                Fix: retry campaign fetch 5× at 500ms intervals before redirect.
+
+  2. [DONE]     Automatic dice rolls — DiceRollModal deleted, server resolves rolls,
+                results appear in DiceLog instantly. No player interaction required.
+
+  3. [DONE]     Starting spells + descriptions — lib/dnd5e/spells.ts created.
+                Character creation populates spells.known. CharacterSheet shows
+                descriptions. spell_learn event added for mid-adventure learning.
+
+  4. [DONE]     Feature descriptions — FEATURE_DESCRIPTIONS in classes.ts.
+                All 12 classes covered. Character creation stores proper descriptions.
+
+  5. [MEDIUM]   Spell casting system — canCastSpell, expendSpellSlot,
+                shortRest/longRest, spell quick-cast buttons in ActionPanel
+
+  3. [LOW]      Level-Up UI wizard modal
+                Logic in lib/dnd5e/leveling.ts. Needs modal UI only.
+
+  4. [LOW]      DM advanced tool panels (NPC manager, quest tracker, monster lookup)
+
+  5. [LOW]      Session log page (/campaign/[id]/sessions)
 
 
 ────────────────────────────────────────────────────────────────────────────────

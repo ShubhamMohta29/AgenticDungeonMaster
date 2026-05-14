@@ -6,6 +6,7 @@ import { parseGameEvents } from '@/lib/gameEvents'
 import { buildDMSystemPrompt } from '@/lib/systemPrompt'
 import { getContextForDM, shouldSummarize, summarizeSession } from '@/lib/worldMemory'
 import { resolveRollRequest } from '@/lib/dice'
+import { checkRateLimit } from '@/lib/rateLimiter'
 
 
 export async function POST(req: NextRequest) {
@@ -41,6 +42,15 @@ export async function POST(req: NextRequest) {
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
+    }
+
+    // Rate limit: 1 DM call per 3 seconds per campaign
+    const rl = checkRateLimit(`dm:${campaignId}`, { windowMs: 3000, max: 1 })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Please wait a moment before sending another action.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      )
     }
 
     const [
@@ -92,19 +102,16 @@ export async function POST(req: NextRequest) {
 
     const { narration, events, rollRequests } = parseGameEvents(response.content)
 
-    // Handle automated dice rolls
+    // Handle automated dice rolls — collect results to return to client
+    const rollResults: Array<{ character: string; total: number; skill: string; dc?: number; success?: boolean }> = []
     if (rollRequests && rollRequests.length > 0) {
       for (const rollReq of rollRequests) {
-        // Find the character for the roll
-        const char = (characters || []).find(c => 
-          c.name.toLowerCase() === rollReq.character.toLowerCase() || 
+        const char = (characters || []).find(c =>
+          c.name.toLowerCase() === rollReq.character.toLowerCase() ||
           c.id === rollReq.character
         )
-        
         if (char) {
           const result = resolveRollRequest(rollReq, char as any)
-          
-          // Create a dice roll message
           await supabaseAdmin.from('messages').insert({
             campaign_id: campaignId,
             character_id: char.id,
@@ -112,8 +119,13 @@ export async function POST(req: NextRequest) {
             content: `${char.name} rolled for ${result.purpose || 'a check'}`,
             metadata: result
           })
-          
-          console.log(`Automated roll for ${char.name}: ${result.total} (${result.purpose})`)
+          rollResults.push({
+            character: char.name,
+            total: result.total,
+            skill: result.skill || result.purpose || rollReq.type,
+            dc: result.dc,
+            success: result.success
+          })
         }
       }
     }
@@ -149,6 +161,7 @@ export async function POST(req: NextRequest) {
       narration,
       events,
       rollRequests,
+      rollResults,
       messageId: savedMessage?.id
     })
 

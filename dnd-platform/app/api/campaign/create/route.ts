@@ -26,10 +26,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    await supabaseAdmin.from('campaign_members').insert({
+    const { error: memberError } = await supabaseAdmin.from('campaign_members').insert({
       campaign_id: campaign.id,
       user_id: user.id
     })
+
+    if (memberError) {
+      console.error('campaign_members INSERT failed:', memberError)
+    }
 
     return NextResponse.json({ campaign })
   } catch (error) {

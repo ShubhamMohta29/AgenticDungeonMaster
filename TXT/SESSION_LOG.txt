@@ -1,0 +1,268 @@
+================================================================================
+  REALMFORGE — SESSION LOG
+  AI-Assisted Development Sessions
+================================================================================
+
+  This file records what was built in each Claude Code session, what bugs
+  were found, and what remains open. Append new sessions chronologically.
+
+
+================================================================================
+  SESSION 1 — 2026-05-14  (Phase 7: Polish & UX)
+================================================================================
+
+  SCOPE
+  ─────
+  Picked up after Phases 0–6 were substantially complete. Goal: work through
+  Phase 7 (polish, persistence, advanced features) from the IMPLEMENTATION_PLAN.
+
+  BUILT
+  ─────
+
+  1. Dark-mode-only refactor
+     — Removed ThemeProvider and ThemeToggle entirely.
+     — Hardcoded `class="dark"` on <html> in app/layout.tsx.
+     — Removed components/providers/ directory.
+     — Rationale: light mode broke the dark-fantasy atmosphere. Theme toggle was
+       wasted complexity. "Dark mode only" is now a documented design rule.
+
+  2. Play page 3-column layout rebuild (app/(game)/campaign/[id]/play/page.tsx)
+     — Left column (w-64): InitiativeTracker stacked above DiceLog.
+     — Center column (flex-1): StoryLog fills available height, ActionPanel
+       pinned below. ActionPanel hidden for archived campaigns.
+     — Right column: CharacterPanel (fixed width from component).
+     — Top bar (h-14): campaign name (amber italic), current_scene (truncated,
+       hidden on small screens), ← Dashboard link.
+     — Archived banner below top bar when campaign.status === 'completed'.
+     — `isArchived` flag gates ActionPanel, shows read-only badge.
+
+  3. ManaBar component (components/ui/ManaBar.tsx)
+     — Sums character.spells.slots and character.spells.slot_max.
+     — Returns null for NON_SPELLCASTERS: fighter, barbarian, monk, rogue.
+     — Blue gradient bar. Wired into CharacterPanel below the HP bar.
+
+  4. "Jump to latest" in StoryLog (components/game/StoryLog.tsx)
+     — Amber button appears when user has scrolled >200px above the bottom.
+     — Clicking it smooth-scrolls to the bottom of the message list.
+
+  5. ActionPanel error recovery (components/game/ActionPanel.tsx)
+     — Added dmError?: string | null and onClearError?: () => void props.
+     — Inline amber-bordered banner shows error text + "Try again" / "×" buttons.
+     — play/page.tsx owns dmError state, passes it down, clears on new action.
+
+  6. Campaign end / archive flow
+     — app/api/campaign/end/route.ts:
+         Auth + membership check. Fetches campaign, characters, last 10
+         narration messages, world memory, quests. Calls Groq Llama 3.3 70B
+         with epic epilogue prompt (maxTokens: 600). Returns { summary }.
+     — app/api/campaign/archive/route.ts:
+         Auth + membership check. Sets campaigns.status = 'completed'.
+     — components/game/CampaignEndModal.tsx:
+         Two-step: loads AI summary on mount (useEffect), shows it, then
+         "End Campaign" confirm button calls archive route, then
+         router.push('/dashboard').
+     — play/page.tsx: END_CAMPAIGN_RE regex detects "end/finish/conclude/
+       close/archive ... campaign" intent → opens CampaignEndModal.
+
+  7. Rate limiter (lib/rateLimiter.ts)
+     — In-memory Map<string, { lastCall, count }>.
+     — checkRateLimit(key, { windowMs, max }) returns { allowed, retryAfter }.
+     — Wired into /api/dm/route.ts: 1 DM call per 3 seconds per campaign.
+     — Returns HTTP 429 with retryAfter on violation.
+
+  KNOWN BUGS / OPEN ITEMS
+  ────────────────────────
+
+  [CRITICAL — UNRESOLVED]
+  After character creation, the play page opens and immediately redirects
+  to /dashboard. Root cause: loadData in play/page.tsx runs a campaign
+  fetch. Supabase RLS checks campaign_members to authorize the read.
+  The newly-created character row triggers the redirect to /play before
+  the campaign_members INSERT has fully propagated through RLS. So the
+  campaign query returns null → router.push('/dashboard').
+
+  Fix: Retry the campaign fetch up to 3× with ~600ms delay before hard-
+  redirecting. See PENDING WORK below.
+
+
+================================================================================
+  SESSION 2 — 2026-05-14  (Phase 7 continued: toasts, character sheet, dashboard)
+================================================================================
+
+  SCOPE
+  ─────
+  Continued Phase 7 work. Focus on toast notifications, CharacterSheet
+  overhaul, dashboard polish, and globals.css animation keyframes.
+
+  BUILT
+  ─────
+
+  1. Toast notification system
+     — store/toastStore.ts (Zustand): addToast / dismissToast.
+       Auto-dismiss after 4000ms via setTimeout inside addToast.
+     — components/ui/ToastContainer.tsx: fixed bottom-4 right-4.
+       Types: info, success, error, xp, loot, levelup, quest.
+       Per-type icon (emoji) and border/accent colour.
+       animate-toastIn on entry.
+     — Wired into play/page.tsx Realtime handlers:
+         characters UPDATE: XP gain → xp toast, level increase → levelup toast.
+         messages INSERT: narration metadata events[] → loot toast, quest toast.
+
+  2. CharacterSheet overhaul (components/character/CharacterSheet.tsx)
+     — Dark-fantasy modal styling: glass panel, modalIn keyframe (slide up
+       + fade in), close on backdrop click.
+     — Tabs: Overview, Spells, Inventory, Features.
+     — Overview tab: all 6 ability scores + modifiers, saving throws with
+       proficiency dot, full skills list with proficiency dots and modifiers.
+     — Spells tab: spell slot grid (circles per level, filled/empty states),
+       spell attack bonus, save DC, prepared spells list with level dots.
+       Only shown for spellcaster classes.
+     — Inventory tab: item cards with rarity-colour borders (common=gray,
+       uncommon=green, rare=blue, very rare=purple, legendary=amber),
+       item type badge, weight total footer.
+     — Features tab: class and racial features listed with descriptions.
+
+  3. Dashboard updates (app/(game)/dashboard/page.tsx)
+     — Campaigns split into Active and Archived sections.
+     — Archived CampaignCard: opacity-60, "Archived" badge, "Read →" button
+       (no btn-amber, no DM Console).
+     — Active CampaignCard: unchanged + "Play →" btn-amber.
+     — campaigns ordered by updated_at desc.
+     — Join error displayed inline below the input.
+     — Empty state panel when campaigns.length === 0.
+
+  4. globals.css animation keyframes
+     — @keyframes toastIn + .animate-toastIn (translateY 8px → 0, fade in).
+     — @keyframes fadeIn + .animate-fadeIn (opacity 0 → 1, 300ms).
+
+
+  KNOWN BUGS / OPEN ITEMS
+  ────────────────────────
+
+  [CRITICAL — RESOLVED in Session 3]
+  Play page redirect bug fixed. See Session 3.
+
+
+================================================================================
+  SESSION 3 — 2026-05-14  (Critical bug fix)
+================================================================================
+
+  SCOPE
+  ─────
+  Fixed the critical play-page redirect bug (Sessions 1 & 2).
+
+  BUILT
+  ─────
+
+  1. Play page RLS timing fix (app/(game)/campaign/[id]/play/page.tsx)
+     — Added retry loop (3×, 600ms delay) around the campaign fetch in loadData.
+     — On first attempt failure (RLS not yet propagated), waits 600ms and retries.
+     — Only redirects to /dashboard after all 3 attempts return null.
+     — Characters and messages are still fetched in parallel after campaign is found.
+
+
+================================================================================
+  SESSION 4 — 2026-05-14  (Dice automation, spell data, feature/spell descriptions)
+================================================================================
+
+  SCOPE
+  ─────
+  UX fixes to dice rolls, populated starting spells at character creation,
+  added feature and spell descriptions to the character sheet.
+
+  BUILT
+  ─────
+
+  1. Automatic dice rolls — DiceRollModal removed entirely
+     — Deleted components/game/DiceRollModal.tsx (was a 2-step modal requiring
+       user interaction: "Roll d20" click → "Confirm" click).
+     — Problem with old modal: it rolled its own independent random number,
+       inconsistent with the server-side roll already computed by resolveRollRequest.
+     — Server already rolled dice and saved dice_roll messages; client was ignoring them.
+     — Fix: server collects rollResults[] and returns them to the client.
+       Client previously auto-sent "Roll result: ..." as a follow-up player action
+       so the DM would narrate the outcome.
+     — Further UX fix: removed the auto-follow-up entirely. The DM's initial response
+       already narrates the action; the roll result appears in the DiceLog on the left.
+       No "Roll result: X" message clutters the chat; no second DM response needed.
+     — store/gameStore.ts: removed pendingRollRequest state and setPendingRollRequest.
+     — api/dm/route.ts: cleaned up isRollResult parameter (no longer needed).
+
+  2. Emergency RLS reset migration (supabase/migrations/010_emergency_rls_reset.sql)
+     — Created to fix 500 Internal Server Error on campaign_members SELECT queries.
+     — Root cause: conflicting/duplicate RLS policies from 9 accumulated migrations.
+     — Script dynamically drops ALL policies on 8 game tables and recreates them
+       cleanly from scratch. Must be pasted into Supabase SQL Editor and run manually.
+
+  3. Starting spells populated at character creation
+     — Created lib/dnd5e/spells.ts with getStartingSpells(cls) function.
+     — Returns level-1 starting spells per class (cantrips + leveled spells combined):
+         Warlock: Eldritch Blast, Minor Illusion, Hex, Hellish Rebuke
+         Wizard: Fire Bolt, Mage Hand, Minor Illusion + 6 spellbook spells
+         Cleric: Sacred Flame, Guidance, Light + 5 prepared spells
+         Bard: Vicious Mockery, Minor Illusion + 4 spells known
+         Sorcerer: 4 cantrips + Chromatic Orb, Magic Missile
+         Druid: Druidcraft, Shillelagh + 4 prepared spells
+         Paladin/Ranger: [] (gain spellcasting at level 2)
+         Non-casters: []
+     — create-character/page.tsx: spells.known now initialised from getStartingSpells(cls)
+       instead of hardcoded [].
+
+  4. spell_learn game event
+     — Added 'spell_learn' to GameEventType union in lib/gameEvents.ts.
+     — Added to tag regex in parseGameEvents so the DM can emit the tag.
+     — Added handler in lib/gameEventApplier.ts: fetches character's current spells
+       JSONB, appends the new spell to known[], saves back to DB.
+     — DM syntax: <spell_learn target="CharacterName" spell="Fireball" />
+
+  5. Feature descriptions for all class features
+     — Added FEATURE_DESCRIPTIONS: Record<string, string> to lib/dnd5e/classes.ts.
+     — One-liner descriptions for every named feature across all 12 classes
+       (Fighting Style, Second Wind, Sneak Attack, Pact Magic, Wild Shape, etc.)
+     — create-character/page.tsx: feature descriptions now look up from
+       FEATURE_DESCRIPTIONS instead of generating "X — a class feature of the Y."
+     — Note: existing characters have old generic descriptions in their DB record;
+       only newly created characters get proper descriptions.
+
+  6. Spell descriptions in character sheet
+     — Added SPELL_DESCRIPTIONS: Record<string, string> and getSpellDescription()
+       to lib/dnd5e/spells.ts. Covers all starting spells + common SRD spells
+       (~80 entries, cantrips and 1st-level).
+     — CharacterSheet.tsx: spell list items now show a gray one-liner below the
+       spell name. Descriptions are looked up at render time (no DB change needed —
+       works for all existing characters immediately).
+
+  BUGS ENCOUNTERED
+  ────────────────
+  Build error: unescaped apostrophes (`can't`, `item's`, `day's`, etc.) in
+  single-quoted TypeScript strings inside spells.ts broke Turbopack parser.
+  Fix: rewrote entire SPELL_DESCRIPTIONS using double-quoted string values.
+
+
+================================================================================
+  PENDING WORK (as of 2026-05-14)
+================================================================================
+
+  Priority  Item
+  ────────  ──────────────────────────────────────────────────────────────────
+
+  MEDIUM    Full spell casting system:
+              — Import SRD spell data (5e-database JSON or equivalent).
+              — canCastSpell(character, spell), expendSpellSlot(character, level)
+              — shortRest / longRest slot recovery
+              — Spell quick-cast buttons in ActionPanel
+
+  LOW       Level-Up UI wizard modal:
+              — Logic already in lib/dnd5e/leveling.ts (checkLevelUp, applyLevelUp)
+              — Modal triggered when XP crosses threshold
+              — Steps: +HP roll, ASI or feat choice, new class features
+
+  LOW       DM advanced tool panels (Phase 7.15):
+              — NPC manager, quest tracker, monster lookup, encounter builder
+
+  LOW       Session log page (/campaign/[id]/sessions):
+              — Chronological list of session summaries
+              — Export as text
+
+
+================================================================================

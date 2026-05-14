@@ -1,6 +1,6 @@
 ================================================================================
   AGENTICDUNGEONMASTER — BUILD STATUS SNAPSHOT
-  Last updated: 2026-05-13
+  Last updated: 2026-05-14
   Status: ACTIVE DEVELOPMENT
 ================================================================================
 
@@ -30,15 +30,18 @@
   Authentication & User Management        [####################] 100%
   Campaign Management                     [####################] 100%
   AI Dungeon Master (Narration Engine)    [####################] 100%
-  Dice Rolling System                     [####################] 100%
+  Dice Rolling System (auto, server-side)  [####################] 100%
   Multiplayer Realtime Sync               [####################] 100%
   World Memory & Session Summaries        [####################] 100%
   Human DM Console + AI Copilot           [####################] 100%
-  Light / Dark Theme                      [####################] 100%
+  Campaign Lifecycle (end / archive)      [####################] 100%
+  Toast Notification System               [##################..] 90%
+  Dark-Mode UI Polish                     [####################] 100%
   XP Bar & Visual Tracking                [####################] 100%
-  Character Creation & Sheets             [##################..] 90%
+  Mana / Spell Slot Bar                   [################....] 80%
+  Character Creation & Sheets             [####################] 98%
   Combat System                           [##################..] 90%
-  Spell System                            [######..............] 30%
+  Spell System                            [###########.........] 55%
   Equipment / Item Mechanics              [#####...............] 25%
   Leveling UI Wizard / Feats              [....................] 0%
 
@@ -68,8 +71,14 @@
             Full D&D 5e class and race options.
 
   [DONE]    Character Sheet Display
-            Live HP, XP bar, AC, conditions, inventory,
-            spells, proficiency bonuses. Realtime sync.
+            Dark-fantasy modal with tabs: Overview, Spells, Inventory, Features.
+            Overview: all ability scores/modifiers, saving throws, skill list.
+            Spells: slot grid, spell attack/DC, prepared spell dots.
+            Each spell shows a one-line description (from SPELL_DESCRIPTIONS map).
+            Inventory: rarity-coloured item cards, weight total.
+            Features: class and racial features with one-line descriptions
+            (from FEATURE_DESCRIPTIONS map covering all 12 classes).
+            Live HP, XP bar, AC, conditions. Realtime sync.
 
   [DONE]    AI Dungeon Master (Groq Llama 3.3 70B)
             Builds dynamic system prompt from campaign context,
@@ -80,7 +89,7 @@
             AI embeds structured XML in narration text.
             Parser extracts and applies events atomically to DB.
             Event types: damage, heal, xp, loot, condition_add,
-            start_combat, new_npc, scene_update.
+            start_combat, new_npc, scene_update, spell_learn.
 
   [DONE]    World Memory / Session Summaries
             Every 20 narration messages, Llama 3.1 8B generates
@@ -103,15 +112,18 @@
             Turn-order display, round counter, HP/AC per
             combatant, conditions visualization.
 
-  [DONE]    Dice Rolling (all standard D&D dice)
+  [DONE]    Dice Rolling — fully automatic, server-side
             d4, d6, d8, d10, d12, d20, d100.
             Advantage/disadvantage support.
             Skill checks, saving throws, attack rolls with
             automatic modifier application.
+            When DM requests a roll, it resolves server-side instantly.
+            Result appears in DiceLog; no player interaction required.
+            DiceRollModal removed — was redundant and re-rolled independently.
 
   [DONE]    Dice Log Sidebar
             Left sidebar showing recent rolls, most recent
-            first, with roll purpose and timestamp.
+            first, with roll purpose, DC, and success/failure badge.
 
   [DONE]    XP Bar
             Visual progress bar for XP. Fixed updating issue
@@ -120,14 +132,32 @@
   [DONE]    HP Bar
             Visual HP bar with colour shifts by health %.
 
-  [DONE]    Light / Dark Theme Toggle
-            Full theme system via ThemeProvider.
-            Persistent user preference.
+  [DONE]    Dark-Mode Only Design
+            ThemeProvider removed. Dark mode hardcoded on <html class="dark">.
+            Glass morphism panels, amber accent, Ibarra Real Nova serif.
 
   [DONE]    Story Log
             Chat-style message history. Shows narration,
             player actions, dice rolls, combat log.
             Realtime updates for all players.
+            "Jump to latest" button when scrolled up.
+
+  [DONE]    Campaign End / Archive Flow
+            Player types "end/conclude/archive campaign" → intent detected.
+            CampaignEndModal loads AI-generated epilogue (Groq 70B).
+            Confirm → campaigns.status set to 'completed'.
+            Archived campaigns show read-only banner on play page.
+            Dashboard lists active and archived campaigns separately.
+
+  [DONE]    Toast Notification System
+            Zustand toastStore + ToastContainer (bottom-right, auto-dismiss 4s).
+            Types: xp, levelup, loot, quest, info, success, error.
+            Wired to Realtime character updates and narration metadata events.
+
+  [DONE]    Mana Bar (Spell Slot Display)
+            ManaBar component below HP bar in character panel.
+            Shows current / total spell slots as a blue gradient bar.
+            Hidden for Fighter, Barbarian, Monk, Rogue.
 
   [DONE]    Human DM Console
             DM types narration, applies game events, broadcasts
@@ -164,11 +194,14 @@
             prone, restrained, stunned, unconscious.
             Mechanical effects on attack and defence rolls.
 
-  [PARTIAL] Spell Slot Tracking
-            Spell slots stored in character JSONB and
-            displayed on character sheet. Full casting rules,
-            spell effect resolution, and concentration
-            tracking not yet implemented.
+  [PARTIAL] Spell System
+            Spell slots stored in character JSONB, displayed on character sheet.
+            Starting spells auto-populated at character creation per class
+            (lib/dnd5e/spells.ts — getStartingSpells).
+            ~80 spell descriptions in SPELL_DESCRIPTIONS map (visible in sheet).
+            spell_learn game event: DM can add spells mid-adventure via XML tag.
+            Full casting rules (canCastSpell, expendSpellSlot, short/long rest),
+            spell effect resolution, and concentration tracking not yet implemented.
 
   [PARTIAL] Equipment / Item Mechanics
             Inventory structure exists with rarity tracking.
@@ -207,9 +240,11 @@
   │   │   │   ├── play/                # Main game screen
   │   │   │   └── dm-console/          # Human DM view
   │   │   ├── api/
-  │   │   │   ├── dm/                  # AI DM endpoint
+  │   │   │   ├── dm/                  # AI DM endpoint (rate-limited 1 req/3s)
   │   │   │   ├── dm-console/          # Human DM narrate + AI copilot
   │   │   │   ├── campaign/            # Campaign creation
+  │   │   │   ├── campaign/end/        # AI epilogue generation
+  │   │   │   ├── campaign/archive/    # Set campaign status = completed
   │   │   │   ├── combat/              # start + action endpoints
   │   │   │   └── dice/                # Dice roll endpoint
   │   │   ├── layout.tsx               # Root layout + theming
@@ -218,12 +253,12 @@
   │   ├── components/
   │   │   ├── character/               # CharacterPanel, CharacterSheet
   │   │   ├── game/                    # ActionPanel, StoryLog,
-  │   │   │                            #   InitiativeTracker, DiceLog
+  │   │   │                            #   InitiativeTracker, DiceLog,
+  │   │   │                            #   CampaignEndModal
   │   │   ├── dm/                      # DMNarrationInput, AICopilot,
   │   │   │                            #   DMToolbox, PartyOverview
-  │   │   ├── ui/                      # Button, Badge, HPBar,
-  │   │   │                            #   XPBar, ThemeToggle
-  │   │   └── providers/               # ThemeProvider
+  │   │   └── ui/                      # HPBar, XPBar, ManaBar,
+  │   │                                #   ToastContainer
   │   ├── lib/
   │   │   ├── aiTypes.ts               # AI request / response types
   │   │   ├── groq.ts                  # Groq API (Llama 3.3 70B + 3.1 8B)
@@ -231,6 +266,7 @@
   │   │   ├── gameEvents.ts            # XML game-event parser
   │   │   ├── gameEventApplier.ts      # Apply events to Supabase DB
   │   │   ├── combatEngine.ts          # D&D 5e combat resolution
+  │   │   ├── rateLimiter.ts           # In-memory rate limiter (1 DM call/3s)
   │   │   ├── dice.ts                  # Dice utilities
   │   │   ├── systemPrompt.ts          # DM prompt builder
   │   │   ├── worldMemory.ts           # Session summarisation
@@ -240,13 +276,16 @@
   │   │   ├── middleware.ts            # Next.js route protection
   │   │   └── dnd5e/
   │   │       ├── abilities.ts         # Modifiers, skills, saving throws
-  │   │       ├── classes.ts           # Fighter, Wizard, Rogue, Cleric...
+  │   │       ├── classes.ts           # Fighter, Wizard, Rogue, Cleric... + FEATURE_DESCRIPTIONS
   │   │       ├── races.ts             # Race definitions + bonuses
   │   │       ├── conditions.ts        # Condition mechanical effects
   │   │       ├── leveling.ts          # XP thresholds + level data
-  │   │       └── monsters.ts          # Monster stat blocks
+  │   │       ├── monsters.ts          # Monster stat blocks
+  │   │       └── spells.ts            # Starting spells per class + SPELL_DESCRIPTIONS (~80 spells)
   │   ├── store/
-  │   │   └── gameStore.ts             # Zustand store
+  │   │   ├── gameStore.ts             # Zustand store (campaign, characters,
+  │   │   │                            #   messages, combat encounter)
+  │   │   └── toastStore.ts            # Zustand toast queue (auto-dismiss 4s)
   │   ├── types/
   │   │   ├── character.ts
   │   │   ├── combat.ts
@@ -254,20 +293,26 @@
   │   │   ├── message.ts
   │   │   ├── npc.ts
   │   │   └── quest.ts
-  │   ├── supabase/migrations/         # 9 SQL migration files
+  │   ├── supabase/migrations/         # 10 SQL migration files
   │   ├── package.json
   │   ├── tsconfig.json
   │   ├── CLAUDE.md
   │   └── README.md
   ├── TXT/
-  │   └── index.txt                    # This file
+  │   ├── index.txt                    # This file (build status snapshot)
+  │   ├── SESSION_LOG.txt              # Per-session dev log
+  │   ├── IMPLEMENTATION_PLAN.txt      # Phase-by-phase build plan with [DONE]/[TODO]
+  │   ├── PRD.txt                      # Product Requirements Document
+  │   ├── BACKEND_SCHEMA.txt           # Full DB schema reference
+  │   ├── APP_FLOW.txt                 # User journey + navigation map
+  │   └── DESIGN_BRIEF.txt             # Visual/UX design system rules
   ├── .env.example
   └── README.md
 
 
 ────────────────────────────────────────────────────────────────────────────────
   DATABASE SCHEMA (Supabase / PostgreSQL)
-  9 migrations applied. RLS enabled on all tables.
+  10 migrations applied. RLS enabled on all tables.
 ────────────────────────────────────────────────────────────────────────────────
 
   TABLE: users
@@ -357,6 +402,9 @@
   RECENT COMMIT HISTORY
 ────────────────────────────────────────────────────────────────────────────────
 
+  2a293a2  checkpoint (Phase 7: polish, campaign end, toasts, CharacterSheet)
+  438988d  checkpoint (Phase 7: mana bar, rate limiter, 3-column layout)
+  900953b  Replaced old middleware.ts with proxy
   53e86a6  Merge pull request #3 — main branch merge
   a1bd6eb  Fixed XP bar updating issue (not reflecting XP gains)
   d18fe4f  Added XP bar component to character sheet
@@ -383,8 +431,10 @@
 ────────────────────────────────────────────────────────────────────────────────
 
   [MEDIUM]  Full Spell Casting System
-            Spell slot deduction on cast, spell effect resolution
-            (damage, healing, conditions), concentration tracking.
+            Starting spells populate at character creation. ~80 spell descriptions
+            shown in character sheet. spell_learn event lets DM teach new spells.
+            Still needed: canCastSpell, expendSpellSlot, shortRest, longRest,
+            spell effect resolution (damage, healing, conditions), concentration.
 
   [MEDIUM]  Item / Equipment Mechanics
             Equipping weapons and armour (AC modification),
@@ -395,6 +445,14 @@
             On reaching XP threshold, show level-up flow:
             choose ASI or feat, unlock class features, update
             spell slots. Logic exists in lib/dnd5e/leveling.ts.
+
+  [LOW]     DM Advanced Tool Panels
+            NPC manager, quest tracker, monster lookup,
+            encounter builder — remaining from Phase 6.
+
+  [LOW]     Session Log Page
+            /campaign/[id]/sessions — chronological session summaries
+            with export-as-text option.
 
   [LOW]     Feats & Multiclassing
             Feat selection at ASI levels. Multiclassing

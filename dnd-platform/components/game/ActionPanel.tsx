@@ -16,9 +16,11 @@ const QUICK_ACTIONS = [
 
 interface ActionPanelProps {
   onAction: (action: string) => void
+  dmError?: string | null
+  onClearError?: () => void
 }
 
-export function ActionPanel({ onAction }: ActionPanelProps) {
+export function ActionPanel({ onAction, dmError, onClearError }: ActionPanelProps) {
   const [input, setInput] = useState('')
   const { isDMThinking, myCharacter } = useGameStore()
 
@@ -38,6 +40,22 @@ export function ActionPanel({ onAction }: ActionPanelProps) {
 
   return (
     <div className="p-6">
+      {/* DM error banner */}
+      {dmError && (
+        <div className="mb-4 max-w-4xl mx-auto flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs">
+          <span>{dmError}</span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => { if (input.trim()) onAction(input.trim()); onClearError?.() }}
+              className="text-xs font-semibold text-amber-highlight hover:text-amber-main transition-colors"
+            >
+              Retry
+            </button>
+            <button onClick={onClearError} className="text-gray-500 hover:text-gray-300 transition-colors">✕</button>
+          </div>
+        </div>
+      )}
+
       {/* Quick actions */}
       <div className="flex flex-wrap gap-2.5 mb-5 justify-center">
         {QUICK_ACTIONS.map(({ label, action }) => (

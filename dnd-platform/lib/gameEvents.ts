@@ -17,6 +17,7 @@ export type GameEventType =
   | 'skill_update'
   | 'rest'
   | 'roll_request'
+  | 'spell_learn'
 
 export interface GameEvent {
   type: GameEventType
@@ -44,7 +45,7 @@ export function parseGameEvents(raw: string): ParsedResponse {
   const rollRequests: RollRequest[] = []
 
   // Extract all XML-style game event tags
-  const tagRegex = /<(game_event|roll_request|scene_update|new_npc|quest_update|new_quest|start_combat|loot)\s([^/]*?)\/>/g
+  const tagRegex = /<(game_event|roll_request|scene_update|new_npc|quest_update|new_quest|start_combat|loot|spell_learn)\s([^/]*?)\/>/g
 
   let match
   while ((match = tagRegex.exec(raw)) !== null) {
