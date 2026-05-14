@@ -13,7 +13,6 @@ import { ActionPanel } from '@/components/game/ActionPanel'
 import { CharacterPanel } from '@/components/character/CharacterPanel'
 import { InitiativeTracker } from '@/components/game/InitiativeTracker'
 import { DiceLog } from '@/components/game/DiceLog'
-import { DiceRollModal } from '@/components/game/DiceRollModal'
 import { CampaignEndModal } from '@/components/game/CampaignEndModal'
 import { ToastContainer } from '@/components/ui/ToastContainer'
 
@@ -32,7 +31,7 @@ export default function PlayPage() {
   const {
     campaign, setCampaign, setCharacters, setMyCharacter,
     addMessage, setEncounter, updateCharacter,
-    setDMThinking, setPendingRollRequest, setMessages
+    setDMThinking, setMessages
   } = useGameStore()
 
   const { addToast } = useToastStore()
@@ -44,6 +43,27 @@ export default function PlayPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { router.push('/login'); return }
 
+        // Step 1: verify campaign membership using the simple direct-equality
+        // RLS policy (auth.uid() = user_id) — same pattern as the dashboard.
+        // Retry up to 5× with 500ms gaps to handle the case where the
+        // campaign_members INSERT hasn't fully committed yet after character
+        // creation.
+        let isMember = false
+        for (let attempt = 0; attempt < 5; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 500))
+          const { data: memberRow } = await supabase
+            .from('campaign_members')
+            .select('campaign_id')
+            .eq('campaign_id', campaignId)
+            .eq('user_id', user.id)
+            .maybeSingle()
+          if (memberRow) { isMember = true; break }
+        }
+        if (!isMember) { router.push('/dashboard'); return }
+
+        // Step 2: now that membership is confirmed, fetch campaign + other data
+        // in parallel. The is_campaign_member() RLS function will pass because
+        // we just confirmed the row exists and auth.uid() is already set.
         const [campaignRes, charactersRes, messagesRes] = await Promise.all([
           supabase.from('campaigns').select('*').eq('id', campaignId).maybeSingle(),
           supabase.from('characters').select('*').eq('campaign_id', campaignId),
@@ -51,7 +71,11 @@ export default function PlayPage() {
             .order('created_at', { ascending: true }).limit(50)
         ])
 
-        if (!campaignRes.data) { router.push('/dashboard'); return }
+        if (!campaignRes.data) {
+          console.error('Campaign fetch returned null despite confirmed membership', campaignRes)
+          router.push('/dashboard')
+          return
+        }
 
         setCampaign(campaignRes.data)
 
@@ -157,7 +181,7 @@ export default function PlayPage() {
   }, [campaignId, addMessage, updateCharacter, setEncounter, setMessages, setCampaign, addToast])
 
   // ── Action handler ───────────────────────────────────────────────────────
-  const handleAction = useCallback(async (action: string) => {
+  const handleAction = useCallback(async (action: string, isRollResult = false) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -174,7 +198,7 @@ export default function PlayPage() {
       const response = await fetch('/api/dm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId, action, characterId: myCharacter?.id })
+        body: JSON.stringify({ campaignId, action, characterId: myCharacter?.id, isRollResult })
       })
       const data = await response.json()
 
@@ -183,19 +207,21 @@ export default function PlayPage() {
         return
       }
 
-      if (data.rollRequests?.length > 0) {
-        setPendingRollRequest(data.rollRequests[0])
+      // Rolls are resolved server-side. Auto-send results back to the DM so it
+      // can narrate the outcome — no user interaction required.
+      if (!isRollResult && data.rollResults?.length > 0) {
+        const summary = data.rollResults.map((r: { character: string; total: number; skill: string; dc?: number; success?: boolean }) => {
+          const outcome = r.success !== undefined ? ` — ${r.success ? 'success' : 'failure'}` : ''
+          return `${r.character} rolled ${r.total} on ${r.skill}${r.dc ? ` (DC ${r.dc})` : ''}${outcome}`
+        }).join(', ')
+        setTimeout(() => handleAction(`Roll result: ${summary}.`, true), 800)
       }
     } catch {
       setDmError("The Dungeon Master's voice fades... Please try again.")
     } finally {
       setDMThinking(false)
     }
-  }, [campaignId, setDMThinking, setPendingRollRequest])
-
-  async function handleRollComplete(result: number, success: boolean) {
-    await handleAction(`I rolled a ${result} — ${success ? 'success' : 'failure'}.`)
-  }
+  }, [campaignId, setDMThinking])
 
   // ── Loading / error screens ──────────────────────────────────────────────
   if (loading) {
@@ -290,8 +316,6 @@ export default function PlayPage() {
         {/* Right: Character Panel */}
         <CharacterPanel />
       </div>
-
-      <DiceRollModal onRollComplete={handleRollComplete} />
 
       {showEndModal && campaign && (
         <CampaignEndModal
