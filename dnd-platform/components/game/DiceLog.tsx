@@ -57,7 +57,7 @@ export function DiceLog() {
     .slice(0, 5)
 
   return (
-    <div className="w-64 h-full glass border-r border-white/10 flex flex-col overflow-hidden">
+    <div className="h-full glass flex flex-col overflow-hidden">
       <div className="p-4 border-b border-white/10 bg-black/20">
         <div className="flex justify-between items-center">
           <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-white/70 flex items-center gap-2">

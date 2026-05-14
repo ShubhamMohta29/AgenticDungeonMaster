@@ -6,6 +6,7 @@ import { parseGameEvents } from '@/lib/gameEvents'
 import { buildDMSystemPrompt } from '@/lib/systemPrompt'
 import { getContextForDM, shouldSummarize, summarizeSession } from '@/lib/worldMemory'
 import { resolveRollRequest } from '@/lib/dice'
+import { checkRateLimit } from '@/lib/rateLimiter'
 
 
 export async function POST(req: NextRequest) {
@@ -41,6 +42,15 @@ export async function POST(req: NextRequest) {
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
+    }
+
+    // Rate limit: 1 DM call per 3 seconds per campaign
+    const rl = checkRateLimit(`dm:${campaignId}`, { windowMs: 3000, max: 1 })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Please wait a moment before sending another action.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      )
     }
 
     const [

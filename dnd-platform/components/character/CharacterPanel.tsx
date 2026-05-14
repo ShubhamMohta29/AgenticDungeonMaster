@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { HPBar } from '@/components/ui/HPBar'
 import { XPBar } from '@/components/ui/XPBar'
+import { ManaBar } from '@/components/ui/ManaBar'
 import { Badge } from '@/components/ui/Badge'
 import { CharacterSheet } from './CharacterSheet'
 
@@ -51,6 +52,9 @@ export function CharacterPanel() {
             <p className="text-xs text-blue-400 mt-2 font-medium">+{myCharacter.temp_hp} temp HP</p>
           )}
         </div>
+
+        {/* Mana / Spell Slots */}
+        <ManaBar character={myCharacter} />
 
         {/* Primary Stats */}
         <div className="grid grid-cols-3 gap-3">
