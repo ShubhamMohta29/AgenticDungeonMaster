@@ -180,3 +180,6 @@ export default function PlayPage() {
       </div>
 
       <DiceRollModal onRollComplete={handleRollComplete} />
+    </div>
+  )
+}

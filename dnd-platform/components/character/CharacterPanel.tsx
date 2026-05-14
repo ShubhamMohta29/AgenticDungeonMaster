@@ -5,7 +5,6 @@ import { HPBar } from '@/components/ui/HPBar'
 import { XPBar } from '@/components/ui/XPBar'
 import { Badge } from '@/components/ui/Badge'
 import { CharacterSheet } from './CharacterSheet'
-import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 export function CharacterPanel() {
   const { myCharacter } = useGameStore()
@@ -116,9 +115,6 @@ export function CharacterPanel() {
             View full character sheet →
           </button>
           
-          <div className="flex justify-center">
-            <ThemeToggle />
-          </div>
         </div>
       </div>
 

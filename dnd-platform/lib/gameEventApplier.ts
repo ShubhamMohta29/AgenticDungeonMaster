@@ -1,6 +1,6 @@
 import { supabaseAdmin } from './supabaseServer'
 
-cotype EventCharacter = {
+type EventCharacter = {
   id: string
   name: string
   hp: number
@@ -49,7 +49,11 @@ export async function applyEvents(
           supabaseAdmin.from('characters').update({ xp: c.xp + amount }).eq('id', c.id)
         ))
       } else if (event.type === 'new_npc') {
- event.data.disposition || 'unknown'
+        await supabaseAdmin.from('npcs').insert({
+          campaign_id: campaignId,
+          name: event.data.name,
+          description: event.data.description,
+          disposition: event.data.disposition || 'unknown'
         })
       } else if (event.type === 'new_quest') {
         await supabaseAdmin.from('quests').insert({

@@ -33,7 +33,7 @@
   Dice Rolling System                     [####################] 100%
   Multiplayer Realtime Sync               [####################] 100%
   World Memory & Session Summaries        [####################] 100%
-  Human DM Console + AI Copilot          [####################] 100%
+  Human DM Console + AI Copilot           [####################] 100%
   Light / Dark Theme                      [####################] 100%
   XP Bar & Visual Tracking                [####################] 100%
   Character Creation & Sheets             [##################..] 90%
