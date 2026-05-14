@@ -181,7 +181,7 @@ export default function PlayPage() {
   }, [campaignId, addMessage, updateCharacter, setEncounter, setMessages, setCampaign, addToast])
 
   // ── Action handler ───────────────────────────────────────────────────────
-  const handleAction = useCallback(async (action: string, isRollResult = false) => {
+  const handleAction = useCallback(async (action: string) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -198,23 +198,13 @@ export default function PlayPage() {
       const response = await fetch('/api/dm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId, action, characterId: myCharacter?.id, isRollResult })
+        body: JSON.stringify({ campaignId, action, characterId: myCharacter?.id })
       })
       const data = await response.json()
 
       if (!response.ok) {
         setDmError(data.error || "The Dungeon Master's voice fades...")
         return
-      }
-
-      // Rolls are resolved server-side. Auto-send results back to the DM so it
-      // can narrate the outcome — no user interaction required.
-      if (!isRollResult && data.rollResults?.length > 0) {
-        const summary = data.rollResults.map((r: { character: string; total: number; skill: string; dc?: number; success?: boolean }) => {
-          const outcome = r.success !== undefined ? ` — ${r.success ? 'success' : 'failure'}` : ''
-          return `${r.character} rolled ${r.total} on ${r.skill}${r.dc ? ` (DC ${r.dc})` : ''}${outcome}`
-        }).join(', ')
-        setTimeout(() => handleAction(`Roll result: ${summary}.`, true), 800)
       }
     } catch {
       setDmError("The Dungeon Master's voice fades... Please try again.")

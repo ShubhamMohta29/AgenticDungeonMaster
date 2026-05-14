@@ -12,7 +12,7 @@ import { checkRateLimit } from '@/lib/rateLimiter'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { campaignId, action, characterId, isRollResult } = body
+    const { campaignId, action, characterId } = body
 
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     if (!campaignId || !action) {
@@ -44,15 +44,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
     }
 
-    // Rate limit: 1 DM call per 3 seconds per campaign (skip for automated roll results)
-    if (!isRollResult) {
-      const rl = checkRateLimit(`dm:${campaignId}`, { windowMs: 3000, max: 1 })
-      if (!rl.allowed) {
-        return NextResponse.json(
-          { error: 'Please wait a moment before sending another action.' },
-          { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
-        )
-      }
+    // Rate limit: 1 DM call per 3 seconds per campaign
+    const rl = checkRateLimit(`dm:${campaignId}`, { windowMs: 3000, max: 1 })
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Please wait a moment before sending another action.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      )
     }
 
     const [

@@ -133,14 +133,17 @@ Goal: Pure TypeScript rules logic — no AI calls, fully deterministic.
     [DONE]  applyCondition / removeCondition
     [DONE]  checkDeath, resolveDeathSave
 
-  2.7  Spells data (lib/dnd5e/spells.ts or equivalent)
-    [TODO]  Verify: does a spells.ts with full SRD data exist?
-             If not: import all SRD spells from 5e-database JSON dataset.
-             Each spell needs: name, level, school, casting_time, range,
-             components, duration, description, classes[].
+  2.7  Spells data (lib/dnd5e/spells.ts)
+    [DONE]  lib/dnd5e/spells.ts exists with:
+             getStartingSpells(cls) — level-1 starting spells per class
+             SPELL_DESCRIPTIONS — ~80 SRD spells with one-line descriptions
+             getSpellDescription(name) — lookup helper
+    [DONE]  spell_learn game event — DM can add spells mid-adventure via XML tag
+             (gameEvents.ts + gameEventApplier.ts)
+    [DONE]  Character creation auto-populates spells.known from getStartingSpells
     [TODO]  canCastSpell(character, spell)
     [TODO]  expendSpellSlot(character, level)
-    [TODO]  shortRest / longRest
+    [TODO]  shortRest / longRest slot recovery
 
   2.8  Monsters data (lib/dnd5e/monsters.ts)
     [DONE]  Monster stat blocks imported
@@ -303,9 +306,10 @@ Goal: Full player UI with real-time multiplayer. Two-player session works.
     [TODO]  "End Turn" button enabled only on current player's turn
 
   5.7  Dice log (components/game/DiceLog.tsx)
-    [DONE]  Shows last N rolls with die type, result, modifier, total
+    [DONE]  Shows last N rolls with die type, result, modifier, DC, success/failure
+    [DONE]  Roll requests from DM resolve automatically server-side — no modal needed.
+             DiceRollModal.tsx deleted. Results appear instantly in DiceLog.
     [TODO]  Manual dice tray buttons (d4, d6, d8, d10, d12, d20, d100)
-    [TODO]  Roll request modal (when Claude requests a specific roll)
 
   5.8  Real-time sync
     [DONE]  Supabase Realtime subscriptions on messages, characters,
@@ -426,11 +430,12 @@ Goal: Production-ready — performance, security, mobile, all edge cases handled
     [TODO]  Connection lost / restored banner
 
   7.10  Spell system (FUTURE-1 — medium priority, but PRD OQ-5 says aim for comprehensiveness)
-    [TODO]  Full SRD spell list imported from 5e-database JSON
+    [DONE]  Starting spells auto-populated at character creation (getStartingSpells)
+    [DONE]  ~80 spell descriptions in SPELL_DESCRIPTIONS, shown in character sheet
+    [DONE]  spell_learn game event — DM can grant spells mid-adventure
+    [DONE]  Spells tab in character sheet — slot grid, spell descriptions, prepared dots
     [TODO]  canCastSpell, expendSpellSlot, shortRest, longRest
     [TODO]  Spell quick-cast buttons in ActionPanel for spellcasters
-    [TODO]  Spell slot dots in character panel
-    [TODO]  Full Spells tab in character sheet
 
   ─── MEDIUM PRIORITY ─────────────────────────────────────────────────────────
 
@@ -528,10 +533,20 @@ CURRENT SPRINT — IMMEDIATE NEXT ACTIONS
   1. [DONE]     Fix play page redirect bug — retry loop in loadData
                 File: app/(game)/campaign/[id]/play/page.tsx
                 Root cause: Supabase RLS timing after character creation.
-                Fix: retry campaign fetch 3× at 600ms intervals before redirect.
+                Fix: retry campaign fetch 5× at 500ms intervals before redirect.
 
-  2. [MEDIUM]   Spell casting system — canCastSpell, expendSpellSlot,
-                shortRest/longRest, SRD spell data, spell quick-cast in ActionPanel
+  2. [DONE]     Automatic dice rolls — DiceRollModal deleted, server resolves rolls,
+                results appear in DiceLog instantly. No player interaction required.
+
+  3. [DONE]     Starting spells + descriptions — lib/dnd5e/spells.ts created.
+                Character creation populates spells.known. CharacterSheet shows
+                descriptions. spell_learn event added for mid-adventure learning.
+
+  4. [DONE]     Feature descriptions — FEATURE_DESCRIPTIONS in classes.ts.
+                All 12 classes covered. Character creation stores proper descriptions.
+
+  5. [MEDIUM]   Spell casting system — canCastSpell, expendSpellSlot,
+                shortRest/longRest, spell quick-cast buttons in ActionPanel
 
   3. [LOW]      Level-Up UI wizard modal
                 Logic in lib/dnd5e/leveling.ts. Needs modal UI only.

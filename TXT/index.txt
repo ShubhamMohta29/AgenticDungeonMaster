@@ -30,7 +30,7 @@
   Authentication & User Management        [####################] 100%
   Campaign Management                     [####################] 100%
   AI Dungeon Master (Narration Engine)    [####################] 100%
-  Dice Rolling System                     [####################] 100%
+  Dice Rolling System (auto, server-side)  [####################] 100%
   Multiplayer Realtime Sync               [####################] 100%
   World Memory & Session Summaries        [####################] 100%
   Human DM Console + AI Copilot           [####################] 100%
@@ -39,9 +39,9 @@
   Dark-Mode UI Polish                     [####################] 100%
   XP Bar & Visual Tracking                [####################] 100%
   Mana / Spell Slot Bar                   [################....] 80%
-  Character Creation & Sheets             [###################.] 95%
+  Character Creation & Sheets             [####################] 98%
   Combat System                           [##################..] 90%
-  Spell System                            [######..............] 30%
+  Spell System                            [###########.........] 55%
   Equipment / Item Mechanics              [#####...............] 25%
   Leveling UI Wizard / Feats              [....................] 0%
 
@@ -74,8 +74,10 @@
             Dark-fantasy modal with tabs: Overview, Spells, Inventory, Features.
             Overview: all ability scores/modifiers, saving throws, skill list.
             Spells: slot grid, spell attack/DC, prepared spell dots.
+            Each spell shows a one-line description (from SPELL_DESCRIPTIONS map).
             Inventory: rarity-coloured item cards, weight total.
-            Features: class and racial features with descriptions.
+            Features: class and racial features with one-line descriptions
+            (from FEATURE_DESCRIPTIONS map covering all 12 classes).
             Live HP, XP bar, AC, conditions. Realtime sync.
 
   [DONE]    AI Dungeon Master (Groq Llama 3.3 70B)
@@ -87,7 +89,7 @@
             AI embeds structured XML in narration text.
             Parser extracts and applies events atomically to DB.
             Event types: damage, heal, xp, loot, condition_add,
-            start_combat, new_npc, scene_update.
+            start_combat, new_npc, scene_update, spell_learn.
 
   [DONE]    World Memory / Session Summaries
             Every 20 narration messages, Llama 3.1 8B generates
@@ -110,15 +112,18 @@
             Turn-order display, round counter, HP/AC per
             combatant, conditions visualization.
 
-  [DONE]    Dice Rolling (all standard D&D dice)
+  [DONE]    Dice Rolling — fully automatic, server-side
             d4, d6, d8, d10, d12, d20, d100.
             Advantage/disadvantage support.
             Skill checks, saving throws, attack rolls with
             automatic modifier application.
+            When DM requests a roll, it resolves server-side instantly.
+            Result appears in DiceLog; no player interaction required.
+            DiceRollModal removed — was redundant and re-rolled independently.
 
   [DONE]    Dice Log Sidebar
             Left sidebar showing recent rolls, most recent
-            first, with roll purpose and timestamp.
+            first, with roll purpose, DC, and success/failure badge.
 
   [DONE]    XP Bar
             Visual progress bar for XP. Fixed updating issue
@@ -189,11 +194,14 @@
             prone, restrained, stunned, unconscious.
             Mechanical effects on attack and defence rolls.
 
-  [PARTIAL] Spell Slot Tracking
-            Spell slots stored in character JSONB and
-            displayed on character sheet. Full casting rules,
-            spell effect resolution, and concentration
-            tracking not yet implemented.
+  [PARTIAL] Spell System
+            Spell slots stored in character JSONB, displayed on character sheet.
+            Starting spells auto-populated at character creation per class
+            (lib/dnd5e/spells.ts — getStartingSpells).
+            ~80 spell descriptions in SPELL_DESCRIPTIONS map (visible in sheet).
+            spell_learn game event: DM can add spells mid-adventure via XML tag.
+            Full casting rules (canCastSpell, expendSpellSlot, short/long rest),
+            spell effect resolution, and concentration tracking not yet implemented.
 
   [PARTIAL] Equipment / Item Mechanics
             Inventory structure exists with rarity tracking.
@@ -244,7 +252,7 @@
   │   │   └── page.tsx                 # Home redirect
   │   ├── components/
   │   │   ├── character/               # CharacterPanel, CharacterSheet
-  │   │   ├── game/                    # ActionPanel, StoryLog, DiceRollModal,
+  │   │   ├── game/                    # ActionPanel, StoryLog,
   │   │   │                            #   InitiativeTracker, DiceLog,
   │   │   │                            #   CampaignEndModal
   │   │   ├── dm/                      # DMNarrationInput, AICopilot,
@@ -268,14 +276,15 @@
   │   │   ├── middleware.ts            # Next.js route protection
   │   │   └── dnd5e/
   │   │       ├── abilities.ts         # Modifiers, skills, saving throws
-  │   │       ├── classes.ts           # Fighter, Wizard, Rogue, Cleric...
+  │   │       ├── classes.ts           # Fighter, Wizard, Rogue, Cleric... + FEATURE_DESCRIPTIONS
   │   │       ├── races.ts             # Race definitions + bonuses
   │   │       ├── conditions.ts        # Condition mechanical effects
   │   │       ├── leveling.ts          # XP thresholds + level data
-  │   │       └── monsters.ts          # Monster stat blocks
+  │   │       ├── monsters.ts          # Monster stat blocks
+  │   │       └── spells.ts            # Starting spells per class + SPELL_DESCRIPTIONS (~80 spells)
   │   ├── store/
   │   │   ├── gameStore.ts             # Zustand store (campaign, characters,
-  │   │   │                            #   messages, combat, pending rolls)
+  │   │   │                            #   messages, combat encounter)
   │   │   └── toastStore.ts            # Zustand toast queue (auto-dismiss 4s)
   │   ├── types/
   │   │   ├── character.ts
@@ -284,7 +293,7 @@
   │   │   ├── message.ts
   │   │   ├── npc.ts
   │   │   └── quest.ts
-  │   ├── supabase/migrations/         # 9 SQL migration files
+  │   ├── supabase/migrations/         # 10 SQL migration files
   │   ├── package.json
   │   ├── tsconfig.json
   │   ├── CLAUDE.md
@@ -303,7 +312,7 @@
 
 ────────────────────────────────────────────────────────────────────────────────
   DATABASE SCHEMA (Supabase / PostgreSQL)
-  9 migrations applied. RLS enabled on all tables.
+  10 migrations applied. RLS enabled on all tables.
 ────────────────────────────────────────────────────────────────────────────────
 
   TABLE: users
@@ -421,17 +430,11 @@
   OPEN WORK ITEMS
 ────────────────────────────────────────────────────────────────────────────────
 
-  [CRITICAL] Play Page RLS Timing Bug
-            After character creation the play page immediately redirects to
-            /dashboard. Root cause: RLS on campaigns table reads
-            campaign_members, which hasn't propagated yet. Fix: retry
-            campaign fetch up to 3× (600ms delay) before hard-redirecting.
-            File: app/(game)/campaign/[id]/play/page.tsx — loadData function.
-
   [MEDIUM]  Full Spell Casting System
-            Spell slot deduction on cast, spell effect resolution
-            (damage, healing, conditions), concentration tracking.
-            canCastSpell, expendSpellSlot, shortRest, longRest.
+            Starting spells populate at character creation. ~80 spell descriptions
+            shown in character sheet. spell_learn event lets DM teach new spells.
+            Still needed: canCastSpell, expendSpellSlot, shortRest, longRest,
+            spell effect resolution (damage, healing, conditions), concentration.
 
   [MEDIUM]  Item / Equipment Mechanics
             Equipping weapons and armour (AC modification),

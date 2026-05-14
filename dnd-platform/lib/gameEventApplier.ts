@@ -158,6 +158,20 @@ export async function applyEvents(
           objectives: []
         })
 
+      } else if (event.type === 'spell_learn' && target) {
+        const spell = event.data.spell
+        if (spell) {
+          const { data: char } = await supabaseAdmin
+            .from('characters').select('spells').eq('id', target.id).single()
+          if (char) {
+            const spells = char.spells || { known: [], prepared: [], slots: {}, slot_max: {} }
+            if (!spells.known.includes(spell)) {
+              spells.known = [...spells.known, spell]
+              await supabaseAdmin.from('characters').update({ spells }).eq('id', target.id)
+            }
+          }
+        }
+
       } else if (event.type === 'scene_update' && event.data.description) {
         await supabaseAdmin
           .from('campaigns')

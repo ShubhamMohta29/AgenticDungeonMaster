@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import type { Character } from '@/types/character'
 import { CLASSES } from '@/lib/dnd5e/classes'
+import { getSpellDescription } from '@/lib/dnd5e/spells'
 
 const SKILLS = [
   { name: 'Acrobatics',     ability: 'dex' },
@@ -263,15 +264,21 @@ export function CharacterSheet({ character, onClose }: CharacterSheetProps) {
                       <div className="space-y-1">
                         {character.spells.known.map(spell => {
                           const isPrepared = character.spells.prepared.includes(spell)
+                          const desc = getSpellDescription(spell)
                           return (
                             <div key={spell}
-                              className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white/5 transition-colors">
-                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isPrepared ? 'bg-blue-400' : 'bg-white/15'}`} />
-                              <span className="text-sm text-gray-300 flex-1">{spell}</span>
-                              {isPrepared && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/25 uppercase font-bold">
-                                  Prepared
-                                </span>
+                              className="py-2 px-3 rounded-lg hover:bg-white/5 transition-colors">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isPrepared ? 'bg-blue-400' : 'bg-white/15'}`} />
+                                <span className="text-sm text-gray-300 flex-1">{spell}</span>
+                                {isPrepared && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/25 uppercase font-bold">
+                                    Prepared
+                                  </span>
+                                )}
+                              </div>
+                              {desc && (
+                                <p className="text-xs text-gray-500 mt-0.5 ml-4 leading-snug">{desc}</p>
                               )}
                             </div>
                           )

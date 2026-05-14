@@ -162,6 +162,84 @@
 
 
 ================================================================================
+  SESSION 4 — 2026-05-14  (Dice automation, spell data, feature/spell descriptions)
+================================================================================
+
+  SCOPE
+  ─────
+  UX fixes to dice rolls, populated starting spells at character creation,
+  added feature and spell descriptions to the character sheet.
+
+  BUILT
+  ─────
+
+  1. Automatic dice rolls — DiceRollModal removed entirely
+     — Deleted components/game/DiceRollModal.tsx (was a 2-step modal requiring
+       user interaction: "Roll d20" click → "Confirm" click).
+     — Problem with old modal: it rolled its own independent random number,
+       inconsistent with the server-side roll already computed by resolveRollRequest.
+     — Server already rolled dice and saved dice_roll messages; client was ignoring them.
+     — Fix: server collects rollResults[] and returns them to the client.
+       Client previously auto-sent "Roll result: ..." as a follow-up player action
+       so the DM would narrate the outcome.
+     — Further UX fix: removed the auto-follow-up entirely. The DM's initial response
+       already narrates the action; the roll result appears in the DiceLog on the left.
+       No "Roll result: X" message clutters the chat; no second DM response needed.
+     — store/gameStore.ts: removed pendingRollRequest state and setPendingRollRequest.
+     — api/dm/route.ts: cleaned up isRollResult parameter (no longer needed).
+
+  2. Emergency RLS reset migration (supabase/migrations/010_emergency_rls_reset.sql)
+     — Created to fix 500 Internal Server Error on campaign_members SELECT queries.
+     — Root cause: conflicting/duplicate RLS policies from 9 accumulated migrations.
+     — Script dynamically drops ALL policies on 8 game tables and recreates them
+       cleanly from scratch. Must be pasted into Supabase SQL Editor and run manually.
+
+  3. Starting spells populated at character creation
+     — Created lib/dnd5e/spells.ts with getStartingSpells(cls) function.
+     — Returns level-1 starting spells per class (cantrips + leveled spells combined):
+         Warlock: Eldritch Blast, Minor Illusion, Hex, Hellish Rebuke
+         Wizard: Fire Bolt, Mage Hand, Minor Illusion + 6 spellbook spells
+         Cleric: Sacred Flame, Guidance, Light + 5 prepared spells
+         Bard: Vicious Mockery, Minor Illusion + 4 spells known
+         Sorcerer: 4 cantrips + Chromatic Orb, Magic Missile
+         Druid: Druidcraft, Shillelagh + 4 prepared spells
+         Paladin/Ranger: [] (gain spellcasting at level 2)
+         Non-casters: []
+     — create-character/page.tsx: spells.known now initialised from getStartingSpells(cls)
+       instead of hardcoded [].
+
+  4. spell_learn game event
+     — Added 'spell_learn' to GameEventType union in lib/gameEvents.ts.
+     — Added to tag regex in parseGameEvents so the DM can emit the tag.
+     — Added handler in lib/gameEventApplier.ts: fetches character's current spells
+       JSONB, appends the new spell to known[], saves back to DB.
+     — DM syntax: <spell_learn target="CharacterName" spell="Fireball" />
+
+  5. Feature descriptions for all class features
+     — Added FEATURE_DESCRIPTIONS: Record<string, string> to lib/dnd5e/classes.ts.
+     — One-liner descriptions for every named feature across all 12 classes
+       (Fighting Style, Second Wind, Sneak Attack, Pact Magic, Wild Shape, etc.)
+     — create-character/page.tsx: feature descriptions now look up from
+       FEATURE_DESCRIPTIONS instead of generating "X — a class feature of the Y."
+     — Note: existing characters have old generic descriptions in their DB record;
+       only newly created characters get proper descriptions.
+
+  6. Spell descriptions in character sheet
+     — Added SPELL_DESCRIPTIONS: Record<string, string> and getSpellDescription()
+       to lib/dnd5e/spells.ts. Covers all starting spells + common SRD spells
+       (~80 entries, cantrips and 1st-level).
+     — CharacterSheet.tsx: spell list items now show a gray one-liner below the
+       spell name. Descriptions are looked up at render time (no DB change needed —
+       works for all existing characters immediately).
+
+  BUGS ENCOUNTERED
+  ────────────────
+  Build error: unescaped apostrophes (`can't`, `item's`, `day's`, etc.) in
+  single-quoted TypeScript strings inside spells.ts broke Turbopack parser.
+  Fix: rewrote entire SPELL_DESCRIPTIONS using double-quoted string values.
+
+
+================================================================================
   PENDING WORK (as of 2026-05-14)
 ================================================================================
 
