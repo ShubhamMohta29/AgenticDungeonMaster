@@ -14,7 +14,10 @@
                                       (Play Now / Sign In). Accessible to all.
 
   /register                           Account creation form.
-                                      Fields: email, password, confirm password.
+                                      Fields: name, email, password, date of birth.
+                                      DOB is required; used to set content rating
+                                      (under 16 / 16–17 / 18+). Stored via auth
+                                      signup metadata → handle_new_user trigger.
 
   /login                              Sign-in form. Email + password.
                                       Link to /register.
@@ -101,10 +104,11 @@
 
   REGISTRATION
     /register
-      ↓  submit (email + password + confirm)
-    Supabase creates auth user
-      ↓  success
-    Auto-login (session set)
+      ↓  submit (name + email + password + date of birth — all required)
+    Supabase creates auth user; DOB passed in raw_user_meta_data
+    handle_new_user trigger writes DOB to public.users.date_of_birth
+      ↓  email confirmation sent
+    User confirms email
       ↓
     /dashboard  (first visit — dashboard is empty, empty state shown)
 

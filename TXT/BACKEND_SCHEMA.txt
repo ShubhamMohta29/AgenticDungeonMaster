@@ -3,7 +3,7 @@
   RealmForge — AI-Powered D&D 5e Online Platform
   Version: 1.0
   Date: 2026-05-13
-  Source: Derived from supabase/migrations/001–009
+  Source: Derived from supabase/migrations/001–011
 ================================================================================
 
 
@@ -22,7 +22,8 @@
   On new user signup:
     Supabase creates a row in auth.users.
     A database trigger (handle_new_user) fires and inserts a corresponding
-    row into public.users with display_name seeded from the user's email.
+    row into public.users with display_name seeded from the user's email,
+    and date_of_birth read from raw_user_meta_data (set during signUp).
     This mirror pattern keeps application logic off auth.users directly.
 
   Environment variables required:
@@ -44,7 +45,7 @@
 
   ─────────────────────────────────────────────────────────────────────────────
   TABLE: public.users
-  Migration: 001_users.sql
+  Migration: 001_users.sql + 011_age_gate.sql (adds date_of_birth)
   ─────────────────────────────────────────────────────────────────────────────
 
   Column          Type          Constraints
@@ -53,12 +54,16 @@
   display_name    text          NOT NULL (seeded with email on signup)
   avatar_url      text          nullable
   preferences     jsonb         DEFAULT '{}'
+  date_of_birth   date          nullable (set from auth signup metadata)
   created_at      timestamptz   DEFAULT now()
 
   Notes:
     - Created automatically via trigger on_auth_user_created.
     - preferences stores UI settings (theme overrides, dice style, etc.)
     - No email column — always join to auth.users for the email.
+    - date_of_birth drives content rating: under 16 (child-safe), 16–17 (teen),
+      18+ (adult/unrestricted). Computed server-side via lib/contentRating.ts.
+      Existing users without a DOB default to 'adult' rating.
 
   ─────────────────────────────────────────────────────────────────────────────
   TABLE: public.campaigns
@@ -645,8 +650,10 @@
 
   handle_new_user()
     Type:     AFTER INSERT trigger on auth.users
-    Action:   INSERT into public.users (id, display_name) on every new signup.
+    Action:   INSERT into public.users (id, display_name, date_of_birth) on every
+              new signup. date_of_birth read from new.raw_user_meta_data->>'date_of_birth'.
     Security: SECURITY DEFINER (runs with elevated privileges)
+    Migration: Function updated in 011_age_gate.sql to include the DOB column.
 
   No other triggers currently defined. All other game state mutations are
   handled explicitly by API routes using the service role client.

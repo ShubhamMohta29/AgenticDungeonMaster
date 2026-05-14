@@ -4,6 +4,7 @@ import { applyEvents } from '@/lib/gameEventApplier'
 import { callGroq } from '@/lib/groq'
 import { parseGameEvents } from '@/lib/gameEvents'
 import { buildDMSystemPrompt } from '@/lib/systemPrompt'
+import { getContentRating } from '@/lib/contentRating'
 import { getContextForDM, shouldSummarize, summarizeSession } from '@/lib/worldMemory'
 import { resolveRollRequest } from '@/lib/dice'
 import { checkRateLimit } from '@/lib/rateLimiter'
@@ -58,14 +59,18 @@ export async function POST(req: NextRequest) {
       { data: characters },
       { data: npcs },
       { data: quests },
+      { data: userProfile },
       dmContext
     ] = await Promise.all([
       supabaseAdmin.from('campaigns').select('*').eq('id', campaignId).single(),
       supabaseAdmin.from('characters').select('*').eq('campaign_id', campaignId),
       supabaseAdmin.from('npcs').select('*').eq('campaign_id', campaignId),
       supabaseAdmin.from('quests').select('*').eq('campaign_id', campaignId),
+      supabaseAdmin.from('users').select('date_of_birth').eq('id', user.id).single(),
       getContextForDM(campaignId)
     ])
+
+    const contentRating = getContentRating((userProfile as any)?.date_of_birth ?? null)
 
     if (!campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
@@ -76,7 +81,8 @@ export async function POST(req: NextRequest) {
       characters: characters || [],
       npcs: npcs || [],
       quests: quests || [],
-      memorySummary: dmContext.latestSummary
+      memorySummary: dmContext.latestSummary,
+      contentRating
     })
 
     // Trim history to save tokens: keep only the last 6 messages

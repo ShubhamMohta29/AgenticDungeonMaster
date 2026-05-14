@@ -240,6 +240,60 @@
 
 
 ================================================================================
+  SESSION 5 — 2026-05-14  (Content age-gating — PRD OQ-2)
+================================================================================
+
+  SCOPE
+  ─────
+  Implemented age-based content filtering for the AI DM, as specified in
+  PRD OQ-2 (item 7.17 of the implementation plan).
+
+  BUILT
+  ─────
+
+  1. Database migration — 011_age_gate.sql
+     — Added date_of_birth date column to public.users (nullable).
+     — Updated handle_new_user() trigger to read date_of_birth from
+       raw_user_meta_data (passed as auth signup metadata) and insert
+       it into public.users alongside display_name.
+
+  2. Content rating utility — lib/contentRating.ts
+     — getContentRating(dateOfBirth: string | null): ContentRating
+     — Returns 'under16', 'teen', or 'adult' based on age computed from DOB.
+     — Returns 'adult' for null/invalid DOB (backwards-compat for existing users).
+
+  3. System prompt update — lib/systemPrompt.ts
+     — contentRating added to SystemPromptContext (optional, defaults to 'adult').
+     — CONTENT_RULES lookup map with per-tier rule blocks:
+         under16: no gore, no sexual content, no profanity, PG combat.
+         teen:    vivid violence allowed, no sexual content, mild language ok.
+         adult:   no restriction block injected.
+     — Content rules block inserted into the DM prompt between history and tags.
+
+  4. DM API route update — app/api/dm/route.ts
+     — Added supabaseAdmin.from('users').select('date_of_birth') to the existing
+       parallel fetch (zero added latency — runs alongside campaign/character fetches).
+     — Calls getContentRating() with the fetched DOB.
+     — Passes contentRating to buildDMSystemPrompt().
+
+  5. Register page update — app/(auth)/register/page.tsx
+     — Added required date of birth date-picker field (type="date", max=today).
+     — Helper text: "Used to set appropriate content for your age group."
+     — DOB passed in supabase.auth.signUp options.data as date_of_birth.
+     — Submit button disabled until all four fields (name, email, password, DOB)
+       are filled.
+
+  DESIGN DECISIONS
+  ────────────────
+  — DOB flows through auth metadata so the DB trigger captures it atomically
+    on signup — no second API call needed, no race condition.
+  — Content rules are enforced server-side in the DM prompt, not client-side —
+    the client never knows the tier, and the restriction cannot be bypassed by
+    manipulating the request.
+  — Existing users (no DOB stored) default to 'adult' so nothing breaks.
+
+
+================================================================================
   PENDING WORK (as of 2026-05-14)
 ================================================================================
 
