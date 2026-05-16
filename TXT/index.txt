@@ -1,6 +1,6 @@
 ================================================================================
   AGENTICDUNGEONMASTER — BUILD STATUS SNAPSHOT
-  Last updated: 2026-05-15
+  Last updated: 2026-05-16
   Status: ACTIVE DEVELOPMENT
 ================================================================================
 
@@ -19,7 +19,9 @@
   AI — Narration      Groq Llama 3.3 70B
   AI — Fast Tasks     Groq Llama 3.1 8B Instant
   AI — DM Copilot     Groq Llama 3.3 70B (switched from Claude Haiku — ANTHROPIC_API_KEY not in use)
-  Security            Supabase Row Level Security (RLS)
+  Security            Supabase RLS + Zod validation + Upstash rate limiting + Sentry
+  Rate Limiting       lib/upstashRateLimit.ts (Upstash Redis in prod, in-memory fallback in dev)
+  Error Monitoring    Sentry (@sentry/nextjs) — needs NEXT_PUBLIC_SENTRY_DSN to activate
   Root Directory      dnd-platform/
 
 
@@ -44,6 +46,7 @@
   Spell System                            [###########.........] 55%
   Equipment / Item Mechanics              [#####...............] 25%
   Leveling UI Wizard / Feats              [....................] 0%
+  Production Readiness / Security         [################....] 80%
 
 
 ────────────────────────────────────────────────────────────────────────────────
@@ -219,6 +222,50 @@
             Fast 8B model for summaries, 70B for narration.
             Reduces API costs on long campaigns.
 
+  [DONE]    Zod Input Validation (all 10 API routes)
+            lib/validation.ts: parseBody(req, Schema) helper + per-route schemas.
+            Every API route validates and type-narrows its request body before
+            touching the DB or calling an AI model. Returns 422 on bad input.
+
+  [DONE]    Security Headers
+            vercel.json: CORS, X-Content-Type-Options, X-Frame-Options,
+              Referrer-Policy, Permissions-Policy for all routes.
+            next.config.ts: full Content-Security-Policy covering all
+              external origins (Supabase, Groq, Anthropic, Google Fonts).
+
+  [DONE]    Upstash Rate Limiter (lib/upstashRateLimit.ts)
+            Sliding-window rate limit backed by Upstash Redis in production.
+            Falls back to in-memory limiter in local dev (no credentials needed).
+            /api/dm: 20 AI calls per user per minute.
+            Needs UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN in Vercel.
+
+  [DONE]    Error Boundaries (components/ui/DMErrorBoundary.tsx)
+            react-error-boundary wrapping StoryLog, ActionPanel (play page),
+            and AICopilot (DM console). Friendly fallback UI instead of crash.
+
+  [DONE]    Prompt Caching — lib/claude.ts
+            System prompt passed with cache_control: { type: 'ephemeral' }.
+            Cached tokens reported in AIResponse.cachedTokens.
+            Applies when Anthropic API is used (summarisation, future routes).
+
+  [DONE]    Sentry Error Monitoring
+            @sentry/nextjs installed and configured (client + server + edge).
+            Instrumentation hook wired to Next.js App Router.
+            Disabled in dev. Needs NEXT_PUBLIC_SENTRY_DSN in Vercel env vars.
+
+  [DONE]    Content Flagging
+            FlagButton on every DM narration bubble (hover to reveal).
+            Submits reason to /api/flag → inserts into moderation_queue table.
+            Duplicate flags silently accepted.
+
+  [DONE]    Privacy Policy + Terms of Service (/privacy, /terms)
+            app/(legal)/privacy/page.tsx and app/(legal)/terms/page.tsx.
+            Linked from login and register pages.
+
+  [DONE]    Mandatory Coding Standards (AGENTS.md)
+            Rules for future routes: must use parseBody, getAuthenticatedUser,
+            rate limiting, DMErrorBoundary, RLS + indexes on new tables, CSP updates.
+
   [DONE]    D&D 5e Conditions System
             Full conditions library: blinded, charmed,
             exhaustion, frightened, grappled, incapacitated,
@@ -264,8 +311,8 @@
   ├── dnd-platform/                    # Main Next.js app
   │   ├── app/
   │   │   ├── (auth)/
-  │   │   │   ├── login/               # Login page
-  │   │   │   └── register/            # Register page
+  │   │   │   ├── login/               # Login page (Terms/Privacy links added)
+  │   │   │   └── register/            # Register page (Terms/Privacy links added)
   │   │   ├── auth/
   │   │   │   └── callback/            # Supabase email confirmation handler
   │   │   ├── (game)/
@@ -273,35 +320,43 @@
   │   │   │   ├── campaign/            # Campaign creation
   │   │   │   ├── play/                # Main game screen
   │   │   │   └── dm-console/          # Human DM view
+  │   │   ├── (legal)/
+  │   │   │   ├── privacy/             # Privacy Policy (/privacy)
+  │   │   │   └── terms/               # Terms of Service (/terms)
   │   │   ├── api/
-  │   │   │   ├── dm/                  # AI DM endpoint (rate-limited 1 req/3s)
-  │   │   │   ├── dm-console/          # Human DM narrate + AI copilot
-  │   │   │   ├── campaign/            # Campaign creation
-  │   │   │   ├── campaign/end/        # AI epilogue generation
-  │   │   │   ├── campaign/archive/    # Set campaign status = completed
-  │   │   │   ├── combat/              # start + action endpoints
-  │   │   │   └── dice/                # Dice roll endpoint
+  │   │   │   ├── dm/                  # AI DM endpoint — Zod + Upstash rate limit
+  │   │   │   ├── dm-console/          # Human DM narrate + AI copilot (Zod)
+  │   │   │   ├── campaign/create/     # Campaign creation (Zod)
+  │   │   │   ├── campaign/join/       # Join by invite code (Zod)
+  │   │   │   ├── campaign/end/        # AI epilogue generation (Zod)
+  │   │   │   ├── campaign/archive/    # Set campaign status = completed (Zod)
+  │   │   │   ├── combat/start/        # Start combat encounter (Zod)
+  │   │   │   ├── combat/action/       # Resolve combat turn (Zod)
+  │   │   │   ├── dice/                # Dice roll endpoint (Zod)
+  │   │   │   └── flag/                # Content flagging → moderation_queue (Zod)
   │   │   ├── layout.tsx               # Root layout + theming
   │   │   ├── globals.css
   │   │   └── page.tsx                 # Home redirect
   │   ├── components/
   │   │   ├── character/               # CharacterPanel, CharacterSheet
-  │   │   ├── game/                    # ActionPanel, StoryLog,
+  │   │   ├── game/                    # ActionPanel, StoryLog (FlagButton added),
   │   │   │                            #   InitiativeTracker, DiceLog,
   │   │   │                            #   CampaignEndModal
   │   │   ├── dm/                      # DMNarrationInput, AICopilot,
   │   │   │                            #   DMToolbox, PartyOverview
-  │   │   └── ui/                      # HPBar, XPBar, ManaBar,
-  │   │                                #   ToastContainer
+  │   │   └── ui/                      # HPBar, XPBar, ManaBar, ToastContainer,
+  │   │                                #   DMErrorBoundary (react-error-boundary)
   │   ├── lib/
-  │   │   ├── aiTypes.ts               # AI request / response types
+  │   │   ├── aiTypes.ts               # AI request / response types (+ cachedTokens)
   │   │   ├── groq.ts                  # Groq API (Llama 3.3 70B + 3.1 8B)
-  │   │   ├── claude.ts                # Claude Haiku API (copilot)
+  │   │   ├── claude.ts                # Anthropic API — prompt caching enabled
+  │   │   ├── validation.ts            # Zod schemas + parseBody() helper (NEW)
+  │   │   ├── upstashRateLimit.ts      # Upstash Redis rate limiter (NEW)
+  │   │   ├── rateLimiter.ts           # In-memory fallback rate limiter
   │   │   ├── contentRating.ts         # getContentRating(dob) → under16|teen|adult
   │   │   ├── gameEvents.ts            # XML game-event parser
   │   │   ├── gameEventApplier.ts      # Apply events to Supabase DB
   │   │   ├── combatEngine.ts          # D&D 5e combat resolution
-  │   │   ├── rateLimiter.ts           # In-memory rate limiter (1 DM call/3s)
   │   │   ├── dice.ts                  # Dice utilities
   │   │   ├── systemPrompt.ts          # DM prompt builder (content-rating aware)
   │   │   ├── worldMemory.ts           # Session summarisation
@@ -328,9 +383,16 @@
   │   │   ├── message.ts
   │   │   ├── npc.ts
   │   │   └── quest.ts
-  │   ├── supabase/migrations/         # 11 SQL migration files
+  │   ├── supabase/migrations/         # 12 SQL migration files (012 adds indexes + moderation_queue)
+  │   ├── instrumentation.ts           # Next.js instrumentation (Sentry server init)
+  │   ├── sentry.client.config.ts      # Sentry browser config
+  │   ├── sentry.server.config.ts      # Sentry Node.js config
+  │   ├── sentry.edge.config.ts        # Sentry Edge runtime config
+  │   ├── vercel.json                  # Security headers + CORS (NEW)
+  │   ├── next.config.ts               # CSP headers + Sentry build plugin
   │   ├── package.json
   │   ├── tsconfig.json
+  │   ├── AGENTS.md                    # Coding standards (Zod, auth, RLS, etc.)
   │   ├── CLAUDE.md
   │   └── README.md
   ├── TXT/

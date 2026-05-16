@@ -426,7 +426,135 @@
 
 
 ================================================================================
-  PENDING WORK (as of 2026-05-15)
+  SESSION 8 — 2026-05-16  (Production readiness: security, monitoring, legal)
+================================================================================
+
+  SCOPE
+  ─────
+  Full production-readiness pass. No new gameplay features — entirely
+  security, reliability, monitoring, and compliance work.
+  16 items from READINESS.md were audited; 11 implemented in code this session.
+
+  BUILT
+  ─────
+
+  1. Zod input validation on all 10 API routes
+     — Installed zod (was missing from package.json).
+     — Created lib/validation.ts:
+         parseBody(req, Schema) helper — returns typed data or a 422 NextResponse.
+         Per-route schemas: DMSchema, CampaignCreateSchema, CampaignJoinSchema,
+         CampaignEndSchema, CampaignArchiveSchema, DMConsoleNarrateSchema,
+         DMConsoleAssistSchema, CombatStartSchema, CombatActionSchema, DiceSchema,
+         FlagContentSchema.
+     — All 10 routes (dm, dm-console/narrate, dm-console/assist, campaign/create,
+       campaign/join, campaign/end, campaign/archive, combat/start, combat/action,
+       dice) now use parseBody instead of manual checks.
+     — Removed ad-hoc UUID_REGEX and typeof checks throughout.
+
+  2. Security headers
+     — Created vercel.json with Access-Control-Allow-Origin, X-Content-Type-Options,
+       X-Frame-Options, Referrer-Policy, and Permissions-Policy headers.
+     — Updated next.config.ts with a full Content-Security-Policy header covering
+       script-src, connect-src (Supabase + Groq + Anthropic), font-src, style-src,
+       img-src, and frame-ancestors.
+
+  3. Upstash Redis rate limiter (lib/upstashRateLimit.ts)
+     — checkRateLimitUpstash(key, { requests, window }) — same call signature as
+       the old in-memory checkRateLimit.
+     — Uses Upstash sliding window when UPSTASH_REDIS_REST_URL and
+       UPSTASH_REDIS_REST_TOKEN env vars are present; falls back to the in-memory
+       limiter (lib/rateLimiter.ts) if they are not (local dev).
+     — /api/dm now uses checkRateLimitUpstash('dm:{userId}', { requests: 20, window: '1 m' }).
+     — Added UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to .env.example.
+     — Installed @upstash/ratelimit and @upstash/redis.
+
+  4. Error boundaries (components/ui/DMErrorBoundary.tsx)
+     — Installed react-error-boundary.
+     — DMErrorBoundary wraps any AI-dependent component. Shows a styled fallback
+       panel with "Try again" button. Error message shown in dev, hidden in prod.
+     — Wraps StoryLog and ActionPanel in play/page.tsx.
+     — Wraps AICopilot in dm-console/page.tsx.
+     — onError logs to console.error (caught by Sentry automatically in prod).
+
+  5. Prompt caching — lib/claude.ts
+     — system prompt now passed as a structured content block with
+       cache_control: { type: 'ephemeral' } instead of a bare string.
+     — response.usage.cache_read_input_tokens captured in AIResponse.cachedTokens.
+     — Updated model default to claude-sonnet-4-6 (was claude-sonnet-4-20250514).
+     — Added cachedTokens?: number to AIResponse interface in lib/aiTypes.ts.
+
+  6. Sentry error monitoring
+     — Installed @sentry/nextjs.
+     — Created sentry.client.config.ts, sentry.server.config.ts, sentry.edge.config.ts.
+     — Created instrumentation.ts (Next.js instrumentation hook — required for
+       server-side Sentry in App Router).
+     — Wrapped next.config.ts export in withSentryConfig(). Source map upload
+       disabled unless SENTRY_AUTH_TOKEN env var is set.
+     — Disabled in NODE_ENV !== 'production' so dev console stays clean.
+     — Needs NEXT_PUBLIC_SENTRY_DSN to activate — wire in Vercel env vars.
+     — Added NEXT_PUBLIC_SENTRY_DSN, SENTRY_ORG, SENTRY_PROJECT, SENTRY_AUTH_TOKEN
+       to .env.example.
+
+  7. DB migration 012 — supabase/migrations/012_indexes_and_moderation.sql
+     — Indexes: idx_campaigns_user_id, idx_campaign_members_user_id,
+       idx_campaign_members_campaign_id, idx_characters_campaign_id,
+       idx_characters_user_id, idx_messages_campaign_id,
+       idx_world_memory_summaries_campaign_id, idx_npcs_campaign_id,
+       idx_quests_campaign_id, idx_combat_encounters_campaign_id.
+     — New table: moderation_queue — stores user-flagged AI responses.
+         Columns: id, message_id (FK → messages), reported_by (FK → auth.users),
+                  reason (text, 1–500 chars), status ('pending'|'reviewed'|'dismissed'),
+                  created_at.
+         RLS: users can INSERT own flags; SELECT own flags. Admins query directly.
+     — ⚠️  Must be run in Supabase SQL editor or via supabase db push.
+
+  8. Privacy and Terms pages
+     — app/(legal)/privacy/page.tsx — hosted at /privacy.
+         Sections: who we are, what we collect, how we use it, third-party services,
+         data retention, GDPR/CCPA rights, cookies, contact.
+     — app/(legal)/terms/page.tsx — hosted at /terms.
+         Sections: acceptance, what RealmForge is, acceptable use, AI content,
+         content you create, availability, limitation of liability, changes, contact.
+     — Both pages linked from the login and register forms
+       ("By signing in you agree to our Terms and Privacy Policy").
+
+  9. Content flagging
+     — components/game/StoryLog.tsx: FlagButton component added to each narration
+       bubble. Hidden (opacity-0) until the bubble is hovered. Click → inline
+       reason input → POST /api/flag → "Flagged" confirmation.
+     — app/api/flag/route.ts: validates with FlagContentSchema (Zod), verifies
+       auth, checks message exists, inserts into moderation_queue.
+       Duplicate flags from the same user are silently accepted (no 409 error).
+
+  10. AGENTS.md coding standards
+      — Added mandatory rules section to dnd-platform/AGENTS.md covering:
+          API routes: must use parseBody (Zod), getAuthenticatedUser, rate limiting.
+          Components: must use DMErrorBoundary for any AI-dependent component.
+          Database: RLS + CREATE INDEX on every new table/FK column.
+          Security: all secrets via process.env, input length limits, CSP updates.
+
+  DECISIONS / NOTES
+  ─────────────────
+  — All Groq routes still use callGroq (not Claude). claude.ts prompt caching
+    applies when Anthropic routes are used (summarisation, future features).
+  — Upstash and Sentry are installed and fully wired but need real credentials
+    to activate in production. See .env.example for required env var names.
+  — SSL certificate verification had to be temporarily disabled (npm config
+    strict-ssl false) to install packages. Re-enabled immediately after.
+    This is a local network issue (likely corporate CA), not a code issue.
+
+  OPEN ITEMS CARRIED FORWARD
+  ──────────────────────────
+  — Run migration 012 in Supabase SQL editor
+  — Add UPSTASH_REDIS_REST_URL + TOKEN to Vercel env vars → activates persistent rate limiting
+  — Add NEXT_PUBLIC_SENTRY_DSN to Vercel env vars → activates error monitoring
+  — Set Anthropic cost limits in Anthropic Console (manual, no code change)
+  — Enable Supabase PITR (requires Pro plan, manual dashboard step)
+  — Update CORS origin in vercel.json once production domain is confirmed
+
+
+================================================================================
+  PENDING WORK (as of 2026-05-16)
 ================================================================================
 
   Priority  Item

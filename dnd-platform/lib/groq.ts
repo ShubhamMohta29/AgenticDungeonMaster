@@ -12,7 +12,7 @@ const DEFAULT_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
 const FAST_MODEL = process.env.GROQ_FAST_MODEL || 'llama-3.1-8b-instant'
 const DEFAULT_MAX_TOKENS = parseInt(process.env.GROQ_MAX_TOKENS || '800', 10)
 
-async function callGroqModel(model: string, defaultTokens: number, req: AIRequest): Promise<AIResponse> {
+async function callGroqModel(model: string, defaultTokens: number, req: AIRequest, fallbackModel?: string): Promise<AIResponse> {
   try {
     const response = await client.chat.completions.create({
       model: req.model || model,
@@ -33,11 +33,15 @@ async function callGroqModel(model: string, defaultTokens: number, req: AIReques
     }
   } catch (error: any) {
     console.error('Groq API Error:', error)
-    
-    // Handle rate limits specifically
+
     if (error.status === 429) {
-      const retryAfter = error.headers?.['retry-after'] 
-        ? parseInt(error.headers['retry-after'], 10) 
+      if (fallbackModel) {
+        console.warn(`Rate limited on ${model}, falling back to ${fallbackModel}`)
+        return callGroqModel(fallbackModel, defaultTokens, req)
+      }
+
+      const retryAfter = error.headers?.['retry-after']
+        ? parseInt(error.headers['retry-after'], 10)
         : undefined
 
       return {
@@ -60,5 +64,5 @@ async function callGroqModel(model: string, defaultTokens: number, req: AIReques
   }
 }
 
-export const callGroq     = (req: AIRequest) => callGroqModel(DEFAULT_MODEL, DEFAULT_MAX_TOKENS, req)
+export const callGroq     = (req: AIRequest) => callGroqModel(DEFAULT_MODEL, DEFAULT_MAX_TOKENS, req, FAST_MODEL)
 export const callGroqFast = (req: AIRequest) => callGroqModel(FAST_MODEL, 500, req)
