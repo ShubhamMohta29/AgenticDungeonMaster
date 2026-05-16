@@ -1,9 +1,9 @@
 ================================================================================
   BACKEND SCHEMA — Data Model & Auth Architecture
   RealmForge — AI-Powered D&D 5e Online Platform
-  Version: 1.0
-  Date: 2026-05-13
-  Source: Derived from supabase/migrations/001–011
+  Version: 1.1
+  Date: 2026-05-16
+  Source: Derived from supabase/migrations/001–012
 ================================================================================
 
 
@@ -32,6 +32,13 @@
     SUPABASE_SERVICE_ROLE_KEY         secret — server-side API routes only
     GROQ_API_KEY                      secret — AI narration (Llama 3.3 70B)
     ANTHROPIC_API_KEY                 secret — DM copilot (Claude Haiku)
+    UPSTASH_REDIS_REST_URL            secret — persistent rate limiting (optional;
+                                      falls back to in-memory when absent)
+    UPSTASH_REDIS_REST_TOKEN          secret — Upstash Redis auth token
+    NEXT_PUBLIC_SENTRY_DSN            public — Sentry error monitoring DSN
+    SENTRY_ORG                        secret — Sentry org slug (for source maps)
+    SENTRY_PROJECT                    secret — Sentry project slug
+    SENTRY_AUTH_TOKEN                 secret — Sentry CI token (source map uploads)
 
 
 ────────────────────────────────────────────────────────────────────────────────
@@ -291,6 +298,38 @@
   and periodically from session summaries (arc type). They are injected into
   the AI DM system prompt to maintain long-term continuity.
 
+  ─────────────────────────────────────────────────────────────────────────────
+  TABLE: public.moderation_queue
+  Migration: 012_indexes_and_moderation.sql
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Column          Type          Constraints
+  ──────────────  ────────────  ────────────────────────────────────────────────
+  id              uuid          PK, DEFAULT gen_random_uuid()
+  message_id      uuid          NOT NULL, FK → public.messages(id)
+                                ON DELETE CASCADE
+  reported_by     uuid          NOT NULL, FK → auth.users(id)
+                                ON DELETE CASCADE
+  reason          text          NOT NULL, CHECK char_length BETWEEN 1 AND 500
+  status          text          NOT NULL, DEFAULT 'pending'
+                                CHECK IN ('pending', 'reviewed', 'dismissed')
+  created_at      timestamptz   NOT NULL, DEFAULT now()
+
+  Purpose: Stores player-flagged AI-generated narration messages for staff review.
+           The flag button appears on hover over DM narration bubbles in StoryLog.
+           Duplicate flags from the same user for the same message are handled
+           gracefully (the /api/flag route returns 200 without inserting).
+
+  RLS:
+    INSERT  auth.uid() = reported_by   (users can submit their own flags)
+    SELECT  auth.uid() = reported_by   (users can see flags they submitted)
+    UPDATE/DELETE  not allowed (only service role can change status)
+
+  Indexes:
+    idx_moderation_queue_message_id  ON (message_id)
+    idx_moderation_queue_status      ON (status) WHERE status = 'pending'
+                                     (partial index — covers pending-review queries)
+
 
 ────────────────────────────────────────────────────────────────────────────────
 3. FOREIGN KEY RELATIONSHIPS
@@ -320,10 +359,14 @@
   world_memory_summaries.message_range_start →  messages.id  (SET NULL on delete)
   world_memory_summaries.message_range_end   →  messages.id  (SET NULL on delete)
 
+  moderation_queue.message_id   →  messages.id  (CASCADE delete)
+  moderation_queue.reported_by  →  auth.users.id  (CASCADE delete)
+
   CASCADE DELETE strategy:
     Deleting a campaign cascades to: campaign_members, characters, messages,
     combat_encounters, npcs, quests, world_memory_summaries.
-    Deleting a user cascades to: campaign_members, characters.
+    Deleting a user cascades to: campaign_members, characters, moderation_queue.
+    Deleting a message cascades to: moderation_queue flags for that message.
     Deleting an NPC nullifies quests.giver_npc_id.
 
 
@@ -333,19 +376,32 @@
 
   Defined indexes (beyond PK auto-indexes):
 
-  messages_campaign_created
-    ON public.messages (campaign_id, created_at DESC)
-    Purpose: The hottest query in the app — fetch latest N messages per campaign.
-             Every page load and every Realtime update reads this index.
+  Original index (migration 004):
+    messages_campaign_created
+      ON public.messages (campaign_id, created_at DESC)
+      Purpose: The hottest query — fetch latest N messages per campaign.
+               Every page load and Realtime update reads this index.
 
   Implicit indexes via UNIQUE constraints:
     campaign_members (campaign_id, user_id)   — prevents duplicate memberships
     campaigns (invite_code)                    — fast lookup by invite code
 
-  Additional indexes to add when query volume grows:
-    characters (campaign_id)       — fetch all characters for a campaign
-    npcs (campaign_id)             — fetch all NPCs for system prompt injection
-    quests (campaign_id, status)   — fetch active quests only
+  Migration 012 indexes — FK coverage across all tables:
+    idx_campaigns_user_id               ON campaigns(dm_user_id)
+    idx_campaign_members_user_id        ON campaign_members(user_id)
+    idx_campaign_members_campaign_id    ON campaign_members(campaign_id)
+    idx_characters_campaign_id          ON characters(campaign_id)
+    idx_characters_user_id              ON characters(user_id)
+    idx_messages_campaign_id            ON messages(campaign_id)
+                                        (point lookups without ORDER BY)
+    idx_world_memory_summaries_campaign_id  ON world_memory_summaries(campaign_id)
+    idx_npcs_campaign_id                ON npcs(campaign_id)
+    idx_quests_campaign_id              ON quests(campaign_id)
+    idx_combat_encounters_campaign_id   ON combat_encounters(campaign_id)
+    idx_moderation_queue_message_id     ON moderation_queue(message_id)
+    idx_moderation_queue_status         ON moderation_queue(status)
+                                        WHERE status = 'pending'
+                                        (partial index — only pending rows)
 
 
 ────────────────────────────────────────────────────────────────────────────────
@@ -407,6 +463,12 @@
     SELECT  auth.uid() ∈ campaign_members
     INSERT  via service role only (created by summarization job)
     UPDATE  not allowed
+
+  TABLE: public.moderation_queue
+    INSERT  auth.uid() = reported_by   (users can submit their own flags)
+    SELECT  auth.uid() = reported_by   (users see only their own submitted flags)
+    UPDATE  not allowed directly (service role changes status to reviewed/dismissed)
+    DELETE  not allowed
 
   SECURITY NOTE — RLS Recursion Fix:
     Early RLS policies used subqueries on campaign_members that caused infinite
@@ -603,6 +665,12 @@
   POST    /api/dice                     Server-side dice roll. Returns full
                                         breakdown. All rolls are server-authoritative.
 
+  POST    /api/flag                     Content moderation flag. Accepts
+                                        { messageId, reason } (reason 1–500 chars).
+                                        Inserts into moderation_queue. Duplicate
+                                        flags from the same user are silently
+                                        ignored (returns 200). Requires auth.
+
   GET     /auth/callback                Supabase email confirmation callback.
                                         Exchanges ?code= param for a session
                                         (supabase.auth.exchangeCodeForSession).
@@ -639,6 +707,9 @@
     SUPABASE_SERVICE_ROLE_KEY   — full DB access, server-only
     GROQ_API_KEY                — AI narration, server-only
     ANTHROPIC_API_KEY           — copilot, server-only
+    UPSTASH_REDIS_REST_URL      — persistent rate limiting, server-only
+    UPSTASH_REDIS_REST_TOKEN    — Upstash auth, server-only
+    SENTRY_AUTH_TOKEN           — source map upload, CI-only
 
   Player input (actions, backstory) passes through Claude/Groq as part of
   the game. All input is stripped of HTML before being sent to AI APIs

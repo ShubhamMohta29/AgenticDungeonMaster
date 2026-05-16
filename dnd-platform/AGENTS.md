@@ -29,7 +29,7 @@ Every new `route.ts` must:
    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
    ```
 
-3. **Apply rate limiting** on every route that calls an AI model, using `checkRateLimit` from `@/lib/rateLimiter`. For new AI routes use the Upstash-backed version from `@/lib/upstashRateLimit` when `UPSTASH_REDIS_REST_URL` is set.
+3. **Apply rate limiting** on every route that calls an AI model, using `checkRateLimit` from `@/lib/rateLimiter`. For new AI routes use the Upstash-backed version from `@/lib/upstashRateLimit` when `UPSTASH_REDIS_REST_URL` is set. The AI layer also implements automatic fallback to faster models when rate limits are hit (see **AI & Model Strategy** below).
 
 4. **Never trust `user_id` from the request body** — always derive it from the verified JWT via `getAuthenticatedUser`.
 
@@ -66,4 +66,24 @@ Every new `route.ts` must:
 2. **Input length limits on all string fields**: no user-supplied string should be passed to the DB or an AI model without a max-length check (Zod's `.max()` handles this).
 
 3. **Content Security Policy is set in `next.config.ts`**. If a new external resource (CDN, font, script) is needed, add its origin to the relevant CSP directive — do not use `'unsafe-inline'` or `*`.
+
+## AI & Model Strategy
+
+**Groq Models**: The app uses Groq as the primary AI backend with automatic fallback on rate limits.
+
+1. **Primary model**: `llama-3.3-70b-versatile` (better narrative quality, higher token limit per response)
+2. **Fallback model**: `llama-3.1-8b-instant` (10× higher rate limit quota, lower latency)
+
+When a request to the primary model receives a 429 (rate limit) response from Groq's API:
+- The request is automatically retried with the fallback model
+- If the fallback also fails, the error is returned to the client
+- All of this is transparent to the user — they don't see a rate limit error unless both models are exhausted
+
+**Why two models?**
+- Free tier Groq limits are strict (~14.4k tokens/min for 70B). Multi-user scenarios hit this quickly.
+- The 8B model has much higher rate limits, trades narrative quality for availability.
+- Automatic fallback ensures users can play even during demand spikes.
+
+**Do not switch models manually** in API routes — call `callGroq()` which handles fallback automatically. `callGroqFast()` is only for intentionally using the fast model (no fallback).
+
 
